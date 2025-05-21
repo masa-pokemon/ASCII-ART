@@ -44,7 +44,7 @@
         });
 
         function imageToAscii(img) {
-            const width = 150;
+            const width = 135;
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const aspectRatio = img.height / img.width;
@@ -63,7 +63,7 @@
                 const g = pixels[i + 1];
                 const b = pixels[i + 2];
                 const gray = (r + g + b) / 3;
-                ascii += chars[Math.min(Math.floor(gray / 75), chars.length - 1)];
+                ascii += chars[Math.min(Math.floor(gray / 67), chars.length - 1)];
                 
                 if ((i / 4 + 1) % width === 0) {
                     ascii += '\n';
