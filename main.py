@@ -2,8 +2,6 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 
-# アスキー文字リスト（濃淡順）
-ASCII_CHARS = ['@', '%', '#', '*', '+', '=', '-', ':', '.', ' ']
 
 # 画像をリサイズして文字数を調整
 def resize_image(image, new_width=100):
@@ -12,14 +10,16 @@ def resize_image(image, new_width=100):
     new_height = int(aspect_ratio * new_width * 0.55)  # 高さ調整（フォントの縦横比に合わせる）
     return image.resize((new_width, new_height))
 
-# グレースケール画像をアスキーアートに変換
+ASCII_CHARS = ['@', '%', '#', '*', '+', '=', '-', ':', '.', ' ']
+
 def image_to_ascii(image):
     image = image.convert("L")  # グレースケール化
     pixels = np.array(image)
     ascii_str = ""
     for row in pixels:
         for pixel in row:
-            ascii_str += ASCII_CHARS[pixel // 25]  # 0-255 を 0-10 に変換
+            index = pixel * (len(ASCII_CHARS) - 1) // 255  # 0〜255 を 0〜9 にマッピング
+            ascii_str += ASCII_CHARS[index]
         ascii_str += "\n"
     return ascii_str
 
