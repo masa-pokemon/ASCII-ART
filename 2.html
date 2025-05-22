@@ -60,7 +60,7 @@
               const gray = 0.299 * r + 0.587 * g + 0.114 * b;
               const index = Math.floor(gray / 255 * (colorset.length - 1));
               const char = colorset[index];
-              output += char// + char; // 横長にするため2倍
+              output += char;// + char; // 横長にするため2倍
             }
             output += '\n';
           }
