@@ -4,70 +4,50 @@
   <meta charset="UTF-8">
   <title>画像をASCIIアートに変換</title>
   <style>
-    body {
-      background-color: #000;
-      color: #fff;
-      font-family: monospace;
-      white-space: pre;
-    }
-    #ascii {
-      line-height: 0.7;
-    }
+    body { background: black; color: white; font-family: monospace; }
+    #ascii-art { white-space: pre; line-height: 0.6; }
   </style>
 </head>
 <body>
   <h1>画像をASCIIアートに変換</h1>
-  <input type="file" id="upload" accept="image/*"><br><br>
-  <pre id="ascii"></pre>
+  <input type="file" id="imageInput" accept="image/*">
+  <pre id="ascii-art"></pre>
 
   <script>
     const colorset = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
-    const ascii = document.getElementById('ascii');
-    const upload = document.getElementById('upload');
+    const asciiWidth = 100; // ASCIIアートの横幅（文字数）
 
-    upload.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-
+    document.getElementById("imageInput").addEventListener("change", function(e) {
+      const file = e.target.files[0];
       const reader = new FileReader();
-      reader.onload = function (e) {
+      reader.onload = function(event) {
         const img = new Image();
-        img.onload = function () {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-
-          // サイズ調整
-          const maxWidth = 100;
-          const aspectRatio = 0.5;
-          const newWidth = maxWidth;
-          const newHeight = img.height * newWidth / img.width * aspectRatio;
-
-          canvas.width = newWidth;
-          canvas.height = newHeight;
-          ctx.drawImage(img, 0, 0, newWidth, newHeight);
-
-          const imageData = ctx.getImageData(0, 0, newWidth, newHeight);
+        img.onload = function() {
+          const canvas = document.createElement("canvas");
+          const ratio = img.height / img.width;
+          canvas.width = asciiWidth;
+          canvas.height = asciiWidth * ratio;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
-          let output = '';
-
-          for (let y = 0; y < newHeight; y++) {
-            for (let x = 0; x < newWidth; x++) {
-              const i = (y * newWidth + x) * 4;
-              const r = data[i];
-              const g = data[i + 1];
-              const b = data[i + 2];
-
+          let ascii = "";
+          for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+              const offset = (y * canvas.width + x) * 4;
+              const r = data[offset];
+              const g = data[offset + 1];
+              const b = data[offset + 2];
               const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-              const index = Math.floor(gray / 255 * (colorset.length - 1));
-              const char = colorset[index];
-              output += char;// + char; // 横長にするため2倍
+              const charIndex = Math.floor((gray / 255) * (colorset.length - 1));
+              const char = colorset[charIndex];
+              ascii += char + char;
             }
-            output += '\n';
+            ascii += "\n";
           }
-
-          ascii.textContent = output;
+          document.getElementById("ascii-art").textContent = ascii;
         };
-        img.src = e.target.result;
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     });
