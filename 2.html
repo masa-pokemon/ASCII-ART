@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>画像をASCIIアートに変換</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: monospace;
+      white-space: pre;
+    }
+    #ascii {
+      line-height: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <h1>画像をASCIIアートに変換</h1>
+  <input type="file" id="upload" accept="image/*"><br><br>
+  <pre id="ascii"></pre>
+
+  <script>
+    const colorset = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
+    const ascii = document.getElementById('ascii');
+    const upload = document.getElementById('upload');
+
+    upload.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // サイズ調整
+          const maxWidth = 100;
+          const aspectRatio = 0.5;
+          const newWidth = maxWidth;
+          const newHeight = img.height * newWidth / img.width * aspectRatio;
+
+          canvas.width = newWidth;
+          canvas.height = newHeight;
+          ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+          const imageData = ctx.getImageData(0, 0, newWidth, newHeight);
+          const data = imageData.data;
+          let output = '';
+
+          for (let y = 0; y < newHeight; y++) {
+            for (let x = 0; x < newWidth; x++) {
+              const i = (y * newWidth + x) * 4;
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+
+              const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+              const index = Math.floor(gray / 255 * (colorset.length - 1));
+              const char = colorset[index];
+              output += char + char; // 横長にするため2倍
+            }
+            output += '\n';
+          }
+
+          ascii.textContent = output;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+</body>
+</html>
