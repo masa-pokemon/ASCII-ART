@@ -13,9 +13,9 @@
   }
   #ascii {
     white-space: pre;
-    line-height: 7px; /* 縦間隔調整 */
-    font-size: 7px; /* フォントサイズ */
-    letter-spacing: 2px; /* 横間隔 */
+    line-height: 7px;
+    font-size: 7px;
+    letter-spacing: 2px;
     background: #000;
     padding: 10px;
     display: inline-block;
@@ -38,7 +38,7 @@
 <pre id="ascii"></pre>
 
 <script>
-  const chars = "@#W$9876543210?!abc;:+=-,._ "; // 明るさ文字セット
+  const chars = "@#W$9876543210?!abc;:+=-,._ ";
 
   const imgFile = document.getElementById("imgFile");
   const widthInput = document.getElementById("width");
@@ -117,10 +117,9 @@
   saveBtn.addEventListener("click", () => {
     if (!currentAscii) return;
 
-    // 画像化用canvas準備
-    const fontSize = 10; // 文字のフォントサイズ(px)
-    const lineHeight = fontSize * 1.1; // 行間調整
-    const canvasWidth = currentWidth * (fontSize * 0.6); // 横幅調整（文字幅は約0.6em）
+    const fontSize = 12; // 文字サイズを大きくしてみる
+    const lineHeight = fontSize * 1.2;
+    const canvasWidth = currentWidth * (fontSize * 0.6);
     const canvasHeight = currentHeight * lineHeight;
 
     const canvas = document.createElement("canvas");
@@ -129,26 +128,34 @@
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
-    // 背景白
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 文字黒
     ctx.fillStyle = "#000";
     ctx.font = `${fontSize}px monospace`;
     ctx.textBaseline = "top";
 
     const lines = currentAscii.split("\n");
-
     for (let i = 0; i < lines.length; i++) {
       ctx.fillText(lines[i], 0, i * lineHeight);
     }
 
-    // 画像をダウンロード
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = "ascii-art.png";
-    link.click();
+    canvas.toBlob(blob => {
+      if (!blob) {
+        alert("画像の生成に失敗しました。");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ascii-art.png";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    });
   });
 </script>
 </body>
