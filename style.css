@@ -1,0 +1,12 @@
+body {
+  font-family: monospace;
+  background-color: #111;
+  color: #0f0;
+  text-align: center;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin-top: 20px;
+}
