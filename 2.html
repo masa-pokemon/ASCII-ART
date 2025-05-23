@@ -1,56 +1,155 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>画像をASCIIアートに変換</title>
-  <style>
-    body { background: black; color: white; font-family: monospace; }
-    #ascii-art { white-space: pre; line-height: 0.6; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ASCII Art Generator + Save as Image</title>
+<style>
+  body {
+    font-family: monospace;
+    background: #222;
+    color: #ddd;
+    padding: 20px;
+  }
+  #ascii {
+    white-space: pre;
+    line-height: 7px; /* 縦間隔調整 */
+    font-size: 7px; /* フォントサイズ */
+    letter-spacing: 2px; /* 横間隔 */
+    background: #000;
+    padding: 10px;
+    display: inline-block;
+  }
+  input, button {
+    margin: 0 5px 10px 0;
+  }
+</style>
 </head>
 <body>
-  <h1>画像をASCIIアートに変換</h1>
-  <input type="file" id="imageInput" accept="image/*">
-  <pre id="ascii-art"></pre>
+<h1>ASCII Art Generator</h1>
 
-  <script>
-    const colorset = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
-    const asciiWidth = 100; // ASCIIアートの横幅（文字数）
+<input type="file" id="imgFile" accept="image/*" />
+<br />
+<label>幅(文字数): <input type="number" id="width" value="80" min="10" max="200" /></label>
+<label>高さ(文字数): <input type="number" id="height" value="40" min="10" max="100" /></label>
+<button id="generate">生成</button>
+<button id="saveImg" disabled>画像として保存</button>
 
-    document.getElementById("imageInput").addEventListener("change", function(e) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement("canvas");
-          const ratio = img.height / img.width;
-          canvas.width = asciiWidth;
-          canvas.height = asciiWidth * ratio;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-          let ascii = "";
-          for (let y = 0; y < canvas.height; y++) {
-            for (let x = 0; x < canvas.width; x++) {
-              const offset = (y * canvas.width + x) * 4;
-              const r = data[offset];
-              const g = data[offset + 1];
-              const b = data[offset + 2];
-              const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-              const charIndex = Math.floor((gray / 255) * (colorset.length - 1));
-              const char = colorset[charIndex];
-              ascii += char + char;
-            }
-            ascii += "\n";
-          }
-          document.getElementById("ascii-art").textContent = ascii;
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  </script>
+<pre id="ascii"></pre>
+
+<script>
+  const chars = "@#W$9876543210?!abc;:+=-,._ "; // 明るさ文字セット
+
+  const imgFile = document.getElementById("imgFile");
+  const widthInput = document.getElementById("width");
+  const heightInput = document.getElementById("height");
+  const generateBtn = document.getElementById("generate");
+  const saveBtn = document.getElementById("saveImg");
+  const asciiPre = document.getElementById("ascii");
+
+  let img = new Image();
+  let currentAscii = "";
+  let currentWidth = 0;
+  let currentHeight = 0;
+
+  imgFile.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    img.src = url;
+  });
+
+  generateBtn.addEventListener("click", () => {
+    if (!img.src) {
+      alert("画像をアップロードしてください");
+      return;
+    }
+    const width = parseInt(widthInput.value);
+    const height = parseInt(heightInput.value);
+    currentWidth = width;
+    currentHeight = height;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const imgRatio = img.width / img.height;
+    const canvasRatio = width / height;
+    let drawWidth, drawHeight;
+
+    if (imgRatio > canvasRatio) {
+      drawWidth = width;
+      drawHeight = width / imgRatio;
+    } else {
+      drawHeight = height;
+      drawWidth = height * imgRatio;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, drawWidth, drawHeight);
+
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    let ascii = "";
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        const r = data[offset];
+        const g = data[offset + 1];
+        const b = data[offset + 2];
+        const avg = (r + g + b) / 3;
+
+        const charIndex = Math.floor((avg / 255) * (chars.length - 1));
+        ascii += chars.charAt(chars.length - 1 - charIndex);
+      }
+      ascii += "\n";
+    }
+
+    currentAscii = ascii;
+    asciiPre.textContent = ascii;
+    saveBtn.disabled = false;
+  });
+
+  saveBtn.addEventListener("click", () => {
+    if (!currentAscii) return;
+
+    // 画像化用canvas準備
+    const fontSize = 10; // 文字のフォントサイズ(px)
+    const lineHeight = fontSize * 1.1; // 行間調整
+    const canvasWidth = currentWidth * (fontSize * 0.6); // 横幅調整（文字幅は約0.6em）
+    const canvasHeight = currentHeight * lineHeight;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    // 背景白
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 文字黒
+    ctx.fillStyle = "#000";
+    ctx.font = `${fontSize}px monospace`;
+    ctx.textBaseline = "top";
+
+    const lines = currentAscii.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], 0, i * lineHeight);
+    }
+
+    // 画像をダウンロード
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = "ascii-art.png";
+    link.click();
+  });
+</script>
 </body>
 </html>
