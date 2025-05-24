@@ -1,77 +1,154 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image to ASCII Converter</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-        }
-        #ascii {
-            font-family: monospace;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            margin-top: 20px;
-            max-width: 100%;
-            overflow-x: auto;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Art Generator + Save as Image</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #222;
+      color: #ddd;
+      padding: 20px;
+    }
+    #ascii {
+      white-space: pre;
+      line-height: 7px;
+      font-size: 7px;
+      letter-spacing: 2px;
+      background: #000;
+      padding: 10px;
+      display: inline-block;
+    }
+    input, button {
+      margin: 0 5px 10px 0;
+    }
+  </style>
 </head>
 <body>
-    <h1>Image to ASCII Converter</h1>
-    <input type="file" id="fileInput" accept="image/*">
-    <div id="ascii"></div>
+  <h1>ASCII Art Generator</h1>
 
-    <script>
-        const chars = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
-        
-        document.getElementById("fileInput").addEventListener("change", function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const img = new Image();
-                    img.onload = function() {
-                        const ascii = imageToAscii(img);
-                        document.getElementById("ascii").textContent = ascii;
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+  <input type="file" id="imgFile" accept="image/*" />
+  <br />
+  <label>幅(文字数): <input type="number" id="width" value="80" min="10" max="200" /></label>
+  <label>高さ(文字数): <input type="number" id="height" value="40" min="10" max="100" /></label>
+  <button id="generate">生成</button>
+  <button id="saveImg" disabled>画像として保存</button>
 
-        function imageToAscii(img) {
-            const width = 135;
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const aspectRatio = img.height / img.width;
-            const newHeight = Math.floor(width * aspectRatio / 2);
-            
-            canvas.width = width;
-            canvas.height = newHeight;
-            ctx.drawImage(img, 0, 0, width, newHeight);
+  <pre id="ascii"></pre>
 
-            const imageData = ctx.getImageData(0, 0, width, newHeight);
-            const pixels = imageData.data;
-            let ascii = '';
+  <script>
+    const chars = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
+    const imgFile = document.getElementById("imgFile");
+    const widthInput = document.getElementById("width");
+    const heightInput = document.getElementById("height");
+    const generateBtn = document.getElementById("generate");
+    const saveBtn = document.getElementById("saveImg");
+    const asciiPre = document.getElementById("ascii");
 
-            for (let i = 0; i < pixels.length; i += 4) {
-                const r = pixels[i];
-                const g = pixels[i + 1];
-                const b = pixels[i + 2];
-                const gray = (r + g + b) / 3;
-                ascii += chars[Math.min(Math.floor(gray / 67), chars.length - 1)];
-                
-                if ((i / 4 + 1) % width === 0) {
-                    ascii += '\n';
-                }
-            }
+    let img = new Image();
+    let currentAscii = "";
+    let currentWidth = 0;
+    let currentHeight = 0;
 
-            return ascii;
+    img.crossOrigin = "anonymous";
+
+    imgFile.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      img.src = url;
+    });
+
+    generateBtn.addEventListener("click", () => {
+      if (!img.src) {
+        alert("画像をアップロードしてください");
+        return;
+      }
+
+      const width = img.width;
+      const height = img.height;
+      currentWidth = width;
+      currentHeight = height;
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const imgRatio = img.width / img.height;
+      const canvasRatio = width / height;
+      let drawWidth, drawHeight;
+
+      if (imgRatio > canvasRatio) {
+        drawWidth = width;
+        drawHeight = width / imgRatio;
+      } else {
+        drawHeight = height;
+        drawWidth = height * imgRatio;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, drawWidth, drawHeight);
+
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      let ascii = "";
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const offset = (y * width + x) * 4;
+          const r = data[offset];
+          const g = data[offset + 1];
+          const b = data[offset + 2];
+          const avg = (r + g + b) / 3;
+
+          const charIndex = Math.floor((avg / 255) * (chars.length - 1));
+          ascii += chars.charAt(chars.length - 1 - charIndex);
+          ascii += chars.charAt(chars.length - 1 - charIndex);
         }
-    </script>
+        ascii += "\n";
+      }
+
+      currentAscii = ascii;
+      asciiPre.textContent = ascii;
+      saveBtn.disabled = false;
+    });
+
+    saveBtn.addEventListener("click", () => {
+      if (!currentAscii) return;
+
+      const fontSize = 12;
+      const lineHeight = fontSize * 1.2;
+      const canvasWidth = currentWidth * (fontSize * 0.6);
+      const canvasHeight = currentHeight * lineHeight;
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = canvasWidth*2;
+      canvas.height = canvasHeight;
+
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#000";
+      ctx.font = `${fontSize}px monospace`;
+
+      const lines = currentAscii.split("\n");
+      for (let i = 0; i < lines.length;) {
+        ctx.fillText(lines[i], 0, (i + 1) * lineHeight);
+        i++;
+        
+      }
+
+      const link = document.createElement("a");
+      link.download = "ascii-art.png";
+      link.href = canvas.toDataURL();
+      link.click();
+    });
+  </script>
 </body>
 </html>
