@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ASCII Art Generator + PDF Export</title>
+  <title>ASCII Art Generator + Save as Image</title>
   <style>
     body {
       font-family: monospace;
@@ -24,9 +24,6 @@
       margin: 0 5px 10px 0;
     }
   </style>
-
-  <!-- jsPDFライブラリの読み込み -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
   <h1>ASCII Art Generator</h1>
@@ -35,7 +32,7 @@
   <br />
   <button id="generate">生成</button>
   <button id="copy">文字をコピー</button>
-  <button id="saveImg" disabled>PDFとして保存</button>
+  <button id="saveImg" disabled>画像として保存</button>
 
   <pre id="ascii"></pre>
 
@@ -73,10 +70,8 @@
         return;
       }
 
-      const width = 100; // ASCIIの解像度を固定化（画質とスピードのバランス）
-      const aspectRatio = img.height / img.width;
-      const height = Math.round(width * aspectRatio * 0.5);
-
+      const width = img.width;
+      const height = img.height;
       currentWidth = width;
       currentHeight = height;
 
@@ -86,7 +81,20 @@
       canvas.width = width;
       canvas.height = height;
 
-      ctx.drawImage(img, 0, 0, width, height);
+      const imgRatio = img.width / img.height;
+      const canvasRatio = width / height;
+      let drawWidth, drawHeight;
+
+      if (imgRatio > canvasRatio) {
+        drawWidth = width;
+        drawHeight = width / imgRatio;
+      } else {
+        drawHeight = height;
+        drawWidth = height * imgRatio;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, drawWidth, drawHeight);
 
       const imgData = ctx.getImageData(0, 0, width, height);
       const data = imgData.data;
@@ -102,7 +110,8 @@
           const avg = (r + g + b) / 3;
 
           const charIndex = Math.floor((avg / 255) * (chars.length - 1));
-          ascii += chars.charAt(chars.length - 1 - charIndex).repeat(2); // 幅調整
+          ascii += chars.charAt(chars.length - 1 - charIndex);
+          ascii += chars.charAt(chars.length - 1 - charIndex);
         }
         ascii += "\n";
       }
@@ -113,7 +122,7 @@
     });
 
     saveBtn.addEventListener("click", () => {
-      if (!currentAscii) return;
+           if (!currentAscii) return;
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({
