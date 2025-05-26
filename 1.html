@@ -74,9 +74,9 @@
         return;
       }
 
-      const width = 100; // ASCIIアートの幅
+      const width = 1000; // ASCIIアートの幅
       const scale = img.height / img.width;
-      const height = Math.round(width * scale * 0.5); // 高さは調整済み
+      const height = Math.round(width * scale * 0.7); // 高さは調整済み
 
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
