@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ASCII Art Generator + PDF Export</title>
+  <title>カラーASCIIアート + PDF</title>
   <style>
     body {
       font-family: monospace;
@@ -12,7 +12,7 @@
       padding: 20px;
     }
     #ascii {
-      white-space: pre;
+      white-space: pre-wrap;
       line-height: 7px;
       font-size: 7px;
       letter-spacing: 2px;
@@ -23,13 +23,15 @@
     input, button {
       margin: 0 5px 10px 0;
     }
+    .char {
+      display: inline;
+    }
   </style>
 
-  <!-- jsPDFライブラリの読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <h1>ASCII Art Generator</h1>
+  <h1>カラーASCIIアート</h1>
 
   <input type="file" id="imgFile" accept="image/*" />
   <br />
@@ -48,14 +50,13 @@
     const asciiPre = document.getElementById("ascii");
 
     let img = new Image();
-    let currentAscii = "";
-    let currentWidth = 0;
-    let currentHeight = 0;
+    let currentColorAscii = [];
+    let currentAsciiText = "";
 
     img.crossOrigin = "anonymous";
 
     copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(currentAscii)
+      navigator.clipboard.writeText(currentAsciiText)
         .then(() => alert("コピーしました"))
         .catch((err) => alert("コピーに失敗しました: " + err));
     });
@@ -73,85 +74,83 @@
         return;
       }
 
-      const width = img.width;
-      const height = img.height;
-      currentWidth = width;
-      currentHeight = height;
+      const width = 100; // ASCIIアートの幅
+      const scale = img.height / img.width;
+      const height = Math.round(width * scale * 0.5); // 高さは調整済み
 
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-
       canvas.width = width;
       canvas.height = height;
-
       ctx.drawImage(img, 0, 0, width, height);
 
-      const imgData = ctx.getImageData(0, 0, width, height);
-      const data = imgData.data;
+      const data = ctx.getImageData(0, 0, width, height).data;
 
-      let ascii = "";
+      let html = "";
+      let asciiLines = [];
+      currentColorAscii = [];
 
-      // 画像のピクセル数に基づいて文字を変換
       for (let y = 0; y < height; y++) {
+        let line = "";
+        let colorLine = [];
         for (let x = 0; x < width; x++) {
           const offset = (y * width + x) * 4;
           const r = data[offset];
           const g = data[offset + 1];
           const b = data[offset + 2];
           const avg = (r + g + b) / 3;
-
-          // 色の明るさに基づいて文字を選ぶ
           const charIndex = Math.floor((avg / 255) * (chars.length - 1));
-          ascii += chars.charAt(chars.length - 1 - charIndex); // 明るい部分は細かい文字
+          const char = chars.charAt(chars.length - 1 - charIndex);
+
+          line += char;
+          colorLine.push({ char, r, g, b });
+
+          html += `<span class="char" style="color: rgb(${r}, ${g}, ${b});">${char}</span>`;
         }
-        ascii += "\n";
+        html += "\n";
+        asciiLines.push(line);
+        currentColorAscii.push(colorLine);
       }
 
-      currentAscii = ascii;
-      asciiPre.textContent = ascii;
+      currentAsciiText = asciiLines.join("\n");
+      asciiPre.innerHTML = html;
       saveBtn.disabled = false;
     });
 
     saveBtn.addEventListener("click", () => {
-      if (!currentAscii) return;
-
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'pt',
-        format: 'a4'
-      });
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
 
       const margin = 40;
       const pageWidth = doc.internal.pageSize.width - margin * 2;
       const pageHeight = doc.internal.pageSize.height - margin * 2;
 
-      const lines = currentAscii.split('\n');
+      const lines = currentColorAscii;
       const maxLineLength = Math.max(...lines.map(line => line.length));
-      const totalLines = lines.length;
-
-      // 横・縦の両方にフィットするフォントサイズを計算
-      const approxCharWidth = pageWidth / maxLineLength;
-      const approxLineHeight = pageHeight / totalLines;
-
-      // ピクセル数に基づいた最適なフォントサイズ
-      const fontSize = Math.min(approxCharWidth * 1.6, approxLineHeight * 0.9);
+      const fontSize = Math.min(pageWidth / maxLineLength * 1.6, pageHeight / lines.length * 0.9);
       const lineHeight = fontSize * 1.2;
 
       doc.setFont('Courier', 'normal');
       doc.setFontSize(fontSize);
 
       let y = margin;
-      for (let i = 0; i < lines.length; i++) {
+      lines.forEach((line, i) => {
         if (y > pageHeight + margin) {
           doc.addPage();
           y = margin;
         }
-        doc.text(lines[i], margin, y);  // 行間を0にするために、y座標を進めない
-        y += fontSize * 0.7;  // 行間を0にして、フォントサイズで次の文字位置を調整
-      }
 
-      doc.save("ascii-art.pdf");
+        let x = margin;
+        line.forEach(({ char, r, g, b }) => {
+          doc.setTextColor(r, g, b);
+          doc.text(char, x, y, { baseline: 'top' });
+          x += fontSize * 0.6; // 文字間隔調整
+        });
+
+        y += lineHeight * 0.6; // 行間調整
+      });
+
+      doc.save("color-ascii-art.pdf");
     });
   </script>
 </body>
