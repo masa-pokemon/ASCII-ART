@@ -2,15 +2,157 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>ASCIIアートジェネレーター</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Art Generator + PDF Export</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #222;
+      color: #ddd;
+      padding: 20px;
+    }
+    #ascii {
+      white-space: pre;
+      line-height: 7px;
+      font-size: 7px;
+      letter-spacing: 2px;
+      background: #000;
+      padding: 10px;
+      display: inline-block;
+    }
+    input, button {
+      margin: 0 5px 10px 0;
+    }
+  </style>
+
+  <!-- jsPDFライブラリの読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <h1>ASCIIアートジェネレーター</h1>
-  <input type="file" id="imageInput" accept="image/*" />
-  <canvas id="canvas" style="display:none;"></canvas>
-  <pre id="asciiOutput"></pre>
+  <h1>ASCII Art Generator</h1>
 
-  <script src="script.js"></script>
+  <input type="file" id="imgFile" accept="image/*" />
+  <br />
+  <button id="generate">生成</button>
+  <button id="copy">文字をコピー</button>
+  <button id="saveImg" disabled>PDFとして保存</button>
+
+  <pre id="ascii"></pre>
+
+  <script>
+    const chars = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
+    const imgFile = document.getElementById("imgFile");
+    const generateBtn = document.getElementById("generate");
+    const saveBtn = document.getElementById("saveImg");
+    const copyBtn = document.getElementById("copy");
+    const asciiPre = document.getElementById("ascii");
+
+    let img = new Image();
+    let currentAscii = "";
+    let currentWidth = 0;
+    let currentHeight = 0;
+
+    img.crossOrigin = "anonymous";
+
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(currentAscii)
+        .then(() => alert("コピーしました"))
+        .catch((err) => alert("コピーに失敗しました: " + err));
+    });
+
+    imgFile.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      img.src = url;
+    });
+
+    generateBtn.addEventListener("click", () => {
+      if (!img.src) {
+        alert("画像をアップロードしてください");
+        return;
+      }
+
+      const width = img.width;
+      const height = img.height;
+      currentWidth = width;
+      currentHeight = height;
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      let ascii = "";
+
+      // 画像のピクセル数に基づいて文字を変換
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const offset = (y * width + x) * 4;
+          const r = data[offset];
+          const g = data[offset + 1];
+          const b = data[offset + 2];
+          const avg = (r + g + b) / 3;
+
+          // 色の明るさに基づいて文字を選ぶ
+          const charIndex = Math.floor((avg / 255) * (chars.length - 1));
+          ascii += chars.charAt(chars.length - 1 - charIndex); // 明るい部分は細かい文字
+        }
+        ascii += "\n";
+      }
+
+      currentAscii = ascii;
+      asciiPre.textContent = ascii;
+      saveBtn.disabled = false;
+    });
+
+    saveBtn.addEventListener("click", () => {
+      if (!currentAscii) return;
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'a4'
+      });
+
+      const margin = 40;
+      const pageWidth = doc.internal.pageSize.width - margin * 2;
+      const pageHeight = doc.internal.pageSize.height - margin * 2;
+
+      const lines = currentAscii.split('\n');
+      const maxLineLength = Math.max(...lines.map(line => line.length));
+      const totalLines = lines.length;
+
+      // 横・縦の両方にフィットするフォントサイズを計算
+      const approxCharWidth = pageWidth / maxLineLength;
+      const approxLineHeight = pageHeight / totalLines;
+
+      // ピクセル数に基づいた最適なフォントサイズ
+      const fontSize = Math.min(approxCharWidth * 1.6, approxLineHeight * 0.9);
+      const lineHeight = fontSize * 1.2;
+
+      doc.setFont('Courier', 'normal');
+      doc.setFontSize(fontSize);
+
+      let y = margin;
+      for (let i = 0; i < lines.length; i++) {
+        if (y > pageHeight + margin) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.text(lines[i], margin, y);
+        y += lineHeight;
+      }
+
+      doc.save("ascii-art.pdf");
+    });
+  </script>
 </body>
 </html>
