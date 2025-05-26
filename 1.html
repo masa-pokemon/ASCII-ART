@@ -147,8 +147,8 @@
           doc.addPage();
           y = margin;
         }
-        doc.text(lines[i], margin, y);
-        y += lineHeight;
+        doc.text(lines[i], margin, y);  // 行間を0にするために、y座標を進めない
+        y += fontSize;  // 行間を0にして、フォントサイズで次の文字位置を調整
       }
 
       doc.save("ascii-art.pdf");
