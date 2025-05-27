@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ASCII Art Generator + PDF Export</title>
+  <title>ASCII Art Generator + PDF Export (Color)</title>
   <style>
     body {
       font-family: monospace;
@@ -24,18 +24,16 @@
       margin: 0 5px 10px 0;
     }
   </style>
-
-  <!-- jsPDFライブラリの読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <h1>ASCII Art Generator</h1>
+  <h1>ASCII Art Generator (Color PDF対応)</h1>
 
   <input type="file" id="imgFile" accept="image/*" />
   <br />
   <button id="generate">生成</button>
   <button id="copy">文字をコピー</button>
-  <button id="saveImg" disabled>PDFとして保存</button>
+  <button id="saveImg" disabled>PDFとして保存（カラー）</button>
 
   <pre id="ascii"></pre>
 
@@ -73,8 +71,12 @@
         return;
       }
 
-      const width = img.width;
-      const height = img.height;
+      // 出力サイズを小さくする（例：100x100以内）
+      const maxWidth = 99999;
+      const scale = maxWidth / img.width;
+      const width = Math.min(img.width, maxWidth);
+      const height = Math.floor(img.height * scale);
+
       currentWidth = width;
       currentHeight = height;
 
@@ -91,7 +93,6 @@
 
       let ascii = "";
 
-      // 画像のピクセル数に基づいて文字を変換
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const offset = (y * width + x) * 4;
@@ -99,10 +100,8 @@
           const g = data[offset + 1];
           const b = data[offset + 2];
           const avg = (r + g + b) / 3;
-
-          // 色の明るさに基づいて文字を選ぶ
           const charIndex = Math.floor((avg / 255) * (chars.length - 1));
-          ascii += chars.charAt(chars.length - 1 - charIndex); // 明るい部分は細かい文字
+          ascii += chars.charAt(chars.length - 1 - charIndex);
         }
         ascii += "\n";
       }
@@ -126,15 +125,20 @@
       const pageWidth = doc.internal.pageSize.width - margin * 2;
       const pageHeight = doc.internal.pageSize.height - margin * 2;
 
-      const lines = currentAscii.split('\n');
+      const canvas = document.createElement("canvas");
+      canvas.width = currentWidth;
+      canvas.height = currentHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+      const data = ctx.getImageData(0, 0, currentWidth, currentHeight).data;
+
+      const lines = currentAscii.split("\n");
       const maxLineLength = Math.max(...lines.map(line => line.length));
       const totalLines = lines.length;
 
-      // 横・縦の両方にフィットするフォントサイズを計算
       const approxCharWidth = pageWidth / maxLineLength;
       const approxLineHeight = pageHeight / totalLines;
 
-      // ピクセル数に基づいた最適なフォントサイズ
       const fontSize = Math.min(approxCharWidth * 1.6, approxLineHeight * 0.9);
       const lineHeight = fontSize * 1.2;
 
@@ -142,16 +146,32 @@
       doc.setFontSize(fontSize);
 
       let y = margin;
-      for (let i = 0; i < lines.length; i++) {
+
+      for (let row = 0; row < lines.length; row++) {
+        const line = lines[row];
+        let x = margin;
+
+        for (let col = 0; col < line.length; col++) {
+          const char = line[col];
+          const pixelIndex = (row * currentWidth + col) * 4;
+          const r = data[pixelIndex];
+          const g = data[pixelIndex + 1];
+          const b = data[pixelIndex + 2];
+
+          doc.setTextColor(r, g, b);
+          doc.text(char, x, y);
+          x += approxCharWidth;
+        }
+
+        y += lineHeight;
+
         if (y > pageHeight + margin) {
           doc.addPage();
           y = margin;
         }
-        doc.text(lines[i], margin, y);  // 行間を0にするために、y座標を進めない
-        y += fontSize * 0.6;  // 行間を0にして、フォントサイズで次の文字位置を調整
       }
 
-      doc.save("ascii-art.pdf");
+      doc.save("ascii-art-color.pdf");
     });
   </script>
 </body>
