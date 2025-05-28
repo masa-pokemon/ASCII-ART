@@ -151,12 +151,14 @@
         const line = lines[y];
         if (startY > pageHeight + margin) {
           doc.addPage();
-          startY = margin;
+          
+          startY = margin + (pageHeight - lineHeight) / 2;
         }
 
         // 行の中央揃えのための X 開始位置を計算
         const lineWidth = line.length * charWidth;
         const startX = margin + (pageWidth - lineWidth) / 2;
+        
 
         for (let x = 0; x < line.length; x++) {
           const char = line.charAt(x);
