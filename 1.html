@@ -145,17 +145,18 @@
 
       doc.setFont('Courier', 'normal');
       doc.setFontSize(fontSize);
-
       let startY = margin;
 
       for (let y = 0; y < totalLines; y++) {
         const line = lines[y];
+        const lineWidth = line.length * charWidth;
+        const startX = margin + (pageWidth - lineWidth) / 2;
         if (startY > pageHeight + margin) {
           doc.addPage();
           startY = margin;
         }
 
-        for (let x = 0; x < line.length; x++) {
+        for (let x = startX; x < line.length; x++) {
           const char = line.charAt(x);
   
           const px = x;
