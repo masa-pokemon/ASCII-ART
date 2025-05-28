@@ -126,32 +126,53 @@
       const pageWidth = doc.internal.pageSize.width - margin * 2;
       const pageHeight = doc.internal.pageSize.height - margin * 2;
 
+      const canvas = document.createElement("canvas");
+      canvas.width = currentWidth;
+      canvas.height = currentHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+      const imgData = ctx.getImageData(0, 0, currentWidth, currentHeight).data;
+
       const lines = currentAscii.split('\n');
       const maxLineLength = Math.max(...lines.map(line => line.length));
       const totalLines = lines.length;
 
-      // 横・縦の両方にフィットするフォントサイズを計算
       const approxCharWidth = pageWidth / maxLineLength;
       const approxLineHeight = pageHeight / totalLines;
-
-      // ピクセル数に基づいた最適なフォントサイズ
       const fontSize = Math.min(approxCharWidth * 1.6, approxLineHeight * 0.9);
-      const lineHeight = fontSize * 1.2;
+      const charWidth = fontSize * 0.6;
+      const lineHeight = fontSize * 0.9;
 
       doc.setFont('Courier', 'normal');
       doc.setFontSize(fontSize);
 
-      let y = margin;
-      for (let i = 0; i < lines.length; i++) {
-        if (y > pageHeight + margin) {
+      let startY = margin;
+
+      for (let y = 0; y < totalLines; y++) {
+        const line = lines[y];
+        if (startY > pageHeight + margin) {
           doc.addPage();
-          y = margin;
+          startY = margin;
         }
-        doc.text(lines[i], margin, y);  // 行間を0にするために、y座標を進めない
-        y += fontSize * 0.6;  // 行間を0にして、フォントサイズで次の文字位置を調整
+
+        for (let x = 0; x < line.length; x++) {
+          const char = line.charAt(x);
+  
+          const px = x;
+          const py = y;
+          const offset = (py * currentWidth + px) * 4;
+          const r = imgData[offset];
+          const g = imgData[offset + 1];
+          const b = imgData[offset + 2];
+
+          doc.setTextColor(r, g, b);
+          doc.text(char, margin + x * charWidth, startY);
+        }
+
+        startY += lineHeight;
       }
 
-      doc.save("ascii-art.pdf");
+      doc.save("ascii-art-color.pdf");
     });
   </script>
 </body>
