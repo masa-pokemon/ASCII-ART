@@ -1,5 +1,6 @@
 import struct
 import zlib
+import streamlit as st
 
 def make_polyglot_png(original_png: bytes, html_payload: str) -> bytes:
     # PNGシグネチャ確認
