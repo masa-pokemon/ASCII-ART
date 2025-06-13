@@ -1,33 +1,32 @@
 import streamlit as st
 
-# PNGのIENDチャンク定義
+# PNGのIENDチャンク
 IEND_CHUNK = b'\x00\x00\x00\x00IEND\xaeB`\x82'
 
-# タイトル表示
-st.title("PNG + HTML ポリグロットファイル生成ツール")
+# タイトル
+st.title("PNG + HTML ポリグロットファイル生成")
 
-# PNGファイルのアップロード
 uploaded_file = st.file_uploader("PNG画像をアップロードしてください", type=["png"])
+html_code = st.text_area("末尾に埋め込むHTMLコード", height=300, value="<h1>Hello from PNG!</h1>")
 
-# HTMLコード入力欄
-html_code = st.text_area("埋め込むHTMLコード", height=300, value="<h1>Hello from PNG!</h1>")
-
-# 実行ボタン
 if st.button("ポリグロットファイル生成") and uploaded_file:
     png_data = uploaded_file.read()
-    html_bytes = html_code.encode("utf-8")
+    html_payload = html_code.encode("utf-8")
 
-    # IENDチャンクの存在を確認
-    if IEND_CHUNK in png_data:
-        polyglot_data = png_data + b'\n<!--\n' + html_bytes + b'\n-->\n'
-    else:
-        st.warning("IENDチャンクが見つかりませんでした。自動的に追加します。")
-        polyglot_data = png_data + IEND_CHUNK + b'\n<!--\n' + html_bytes + b'\n-->\n'
+    # IENDがなければ追加
+    if IEND_CHUNK not in png_data:
+        st.warning("IENDチャンクが見つかりませんでした。追加します。")
+        png_data += IEND_CHUNK
+
+    # ポリグロットファイル作成（HTMLを「<!--」の中に入れて、画像として壊れないように）
+    polyglot_data = png_data + b"\n<!--\n" + html_payload + b"\n-->\n"
 
     # ダウンロードボタン
     st.download_button(
-        label="ポリグロットファイルをダウンロード",
+        label="ポリグロットPNGファイルをダウンロード",
         data=polyglot_data,
         file_name="polyglot.png",
         mime="image/png"
     )
+
+    st.markdown("💡 `.png`として画像ビューアで表示でき、`.html`にリネームすればWebページとしても動作します。")
