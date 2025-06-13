@@ -1,30 +1,36 @@
 import streamlit as st
 
-def make_polyglot(png_data: bytes, html_code: str) -> bytes:
-    # PNGファイルの終端にHTMLをコメントとして追加
-    polyglot_data = bytearray(png_data)
+# ヘッダー表示
+st.title("PNG + HTML ポリグロットファイル生成ツール")
 
-    # HTMLはPNGとして無害になるようにHTMLコメントとして追加
-    html_payload = b"\n<!--\n" + html_code.encode("utf-8") + b"\n-->\n"
-
-    polyglot_data.extend(html_payload)
-    return bytes(polyglot_data)
-
-
-st.title("Polyglot PNG + HTML ファイル作成ツール")
-
+# PNGファイルアップロード
 uploaded_file = st.file_uploader("PNG画像をアップロードしてください", type=["png"])
-html_code = st.text_area("埋め込みたいHTMLコードを入力してください", height=200, value="<h1>Hello Polyglot</h1>")
 
-if uploaded_file and html_code:
+# HTMLコード入力
+html_code = st.text_area("追加するHTMLコード", height=300, value="<h1>Hello from PNG!</h1>")
+
+# 実行ボタン
+if st.button("ポリグロットファイル生成") and uploaded_file:
+    # PNGの内容を読み込み
     png_data = uploaded_file.read()
-    polyglot = make_polyglot(png_data, html_code)
 
-    st.download_button(
-        label="Polyglot PNG+HTML ファイルをダウンロード",
-        data=polyglot,
-        file_name="polyglot.png",
-        mime="image/png"
-    )
+    # IENDチャンクを探して挿入ポイントを見つける
+    iend_marker = b'\x00\x00\x00\x00IEND\xaeB`\x82'
+    iend_index = png_data.find(iend_marker)
 
-    st.image(png_data, caption="元のPNG画像")
+    if iend_index == -1:
+        st.error("IENDチャンクが見つかりません。これは有効なPNGファイルではない可能性があります。")
+    else:
+        # HTMLコンテンツをバイト化
+        html_bytes = html_code.encode("utf-8")
+
+        # PNG + HTMLの結合（IENDチャンクの後にHTML追加）
+        polyglot_data = png_data + b'\n<!--\n' + html_bytes + b'\n-->\n'
+
+        # ダウンロード
+        st.download_button(
+            label="ポリグロットファイルをダウンロード",
+            data=polyglot_data,
+            file_name="polyglot.png",
+            mime="image/png"
+        )
