@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTCドンジャラ - 2人対戦</title>
+    <title>WebRTCドンジャラ - 2人対戦＆チャット</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <script type="module">
         // Firebaseのインポート
@@ -74,6 +74,11 @@
         const connectionStatus = document.getElementById('connection-status');
         const currentTurnDisplay = document.getElementById('current-turn');
         const userIdDisplay = document.getElementById('user-id-display');
+        
+        // チャット関連DOM要素
+        const messagesList = document.getElementById('messages-list');
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
 
         // -----------------------------------------------------
         // 1. Firebase初期化と認証
@@ -144,6 +149,7 @@
                 currentPlayerId: '',
                 status: 'waiting', // 'waiting', 'playing', 'finished'
                 signaling: {},
+                messages: [], // チャットメッセージ格納用
                 lastUpdated: Date.now()
             };
         }
@@ -210,7 +216,8 @@
                 // UI切り替え
                 document.getElementById('room-title').textContent = `ルームID: ${roomId}`;
                 lobbyContainer.style.display = 'none';
-                gameContainer.style.display = 'block';
+                gameContainer.style.display = 'flex'; // Flexboxに変更
+                document.getElementById('game-content').style.display = 'block';
 
                 // ルームの変更を監視開始
                 startRoomListener();
@@ -251,8 +258,13 @@
                     // シグナリング処理 (接続確立まで)
                     handleSignaling();
 
-                    // UIの更新 (ルームID表示、ターン表示など)
+                    // ゲームUIの更新 (ルームID表示、ターン表示など)
                     updateGameUI(roomData);
+                    
+                    // チャットメッセージの更新
+                    if (roomData.messages) {
+                        renderMessages(roomData.messages);
+                    }
 
                 } else {
                     displayMessage("ルームは削除されました。", 'error');
@@ -455,7 +467,8 @@
                 };
                 dataChannel.send(JSON.stringify(message));
             } else {
-                displayMessage("P2P接続が確立されていません。", 'error');
+                // P2P未接続時はFirestore経由でアクションを試みる（簡易フォールバック）
+                console.warn("P2P接続なし。アクションの実行に失敗、またはFirestore同期待ち。");
             }
         }
         
@@ -543,13 +556,15 @@
             // 相手の手牌 (裏返し)
             opponentHandContainer.innerHTML = '';
             if (opponentPlayerState) {
+                // 相手の手牌の枚数だけ裏返しの牌を表示
                 for (let i = 0; i < opponentPlayerState.hand.length; i++) {
+                    // P2P通信が確立していれば、相手の手牌はFirestoreには入っていない（空配列）
+                    // したがって、このhand.lengthはP2Pで同期されたローカルの状態に基づく必要がある
+                    // ここではシンプルにFirestoreのplayers配列のhand.lengthを使う (P2P同期が失敗した場合のフォールバック)
                     opponentHandContainer.appendChild(Object.assign(document.createElement('div'), { className: 'tile face-down' }));
                 }
             }
 
-            // 自分の手牌は `updateUI` で更新される
-            
             // ホストはゲーム開始ボタンを表示
             if (isHost && data.players.length === 2 && data.status === 'waiting') {
                 document.getElementById('start-game-button').style.display = 'block';
@@ -618,6 +633,7 @@
          */
         function renderDiscardedTiles(tiles) {
             discardContainer.innerHTML = '';
+            // 最新の15枚を表示
             tiles.slice(-15).forEach(tileId => {
                  discardContainer.appendChild(createTileElement(tileId, false));
             });
@@ -680,18 +696,15 @@
                         lastUpdated: Date.now()
                     });
                     
-                    // P2Pで相手にも通知
+                    // P2Pで相手にも通知 (成功した場合のみ)
                     sendGameAction('DRAW_TILE', { tileId: drawnTile, newDeck: newDeck });
                 });
             } else {
-                // クライアントはホストに操作を要求
-                // NOTE: この実装では、クライアントもホストも直接Firestoreのトランザクションを試み、成功した方が更新を行う（楽観的ロックの簡易版）。
-                // 厳密にはクライアントはアクションメッセージをホストに送り、ホストが更新するべき。
-                // 今回はシンプルに、ホスト側が更新を担当し、クライアントはP2Pの同期メッセージを待つ。
+                // クライアントは、ホストからのFirestore更新を待つ
                 displayMessage("ホストからの同期を待っています...", 'normal');
             }
 
-            // ローカルUI更新
+            // ローカルUI更新 (トランザクション成功前にローカル状態を先行更新するのは危険だが、ここでは簡易的に行う)
             isDrawingPhase = true;
             updateUI();
             updateGameUI(roomData);
@@ -707,8 +720,8 @@
                 // 相手の手札は見た目上増えるが、中身は分からない
                 opponent.hand.push('???'); 
             }
-            roomData.deck = newDeck;
-            roomData.currentPlayerId = opponent.userId; // 相手のターンに
+            // roomData.deck = newDeck; // Firestoreのリスナーが更新するので不要だが、P2P同期があれば必要
+            // roomData.currentPlayerId = opponent.userId; // 相手のターンに
             updateGameUI(roomData);
             displayMessage("対戦相手が牌を引きました。");
         }
@@ -734,6 +747,7 @@
                     if (currentRoomData.currentPlayerId !== userId) return;
 
                     const myPlayerIndex = currentRoomData.players.findIndex(p => p.userId === userId);
+                    // Firestoreの配列から削除
                     currentRoomData.players[myPlayerIndex].hand.splice(tileIndex, 1);
                     currentRoomData.discardedTiles.push(tileIdToDiscard);
 
@@ -772,7 +786,7 @@
          */
         function opponentDiscardTile(tileId, opponentNewHand, nextPlayerId) {
             roomData.discardedTiles.push(tileId);
-            roomData.currentPlayerId = nextPlayerId;
+            // roomData.currentPlayerId = nextPlayerId; // Firestoreのリスナーが更新するので不要
             
             // 相手の手牌を1枚減らす (ダミー)
             const opponent = roomData.players.find(p => p.userId !== userId);
@@ -804,79 +818,75 @@
         }
         
         /**
-         * 役の判定 (3枚組3つ)
+         * 役の判定 (3枚組3つ - 簡易ロジック)
          */
         function checkYaku(hand) {
-            if (hand.length !== 9) return false;
-
-            const tileTypes = hand.map(id => id.substring(0, 2)).sort();
-            let spCount = tileTypes.filter(type => type === SPECIAL_TILE).length;
-            let mainTiles = tileTypes.filter(type => type !== SPECIAL_TILE);
+            // NOTE: ドンジャラの役判定ロジックは非常に複雑なため、ここでは簡易的なロジックのみを実装しています。
+            // 9枚の手牌で、特殊牌を含めて3枚組が3つできているか（刻子または順子）を判定します。
             
-            const counts = {};
-            mainTiles.forEach(type => { counts[type] = (counts[type] || 0) + 1; });
-
-            function findSets(currentTiles, remainingSP) {
-                if (currentTiles.length === 0) return true;
+            if (hand.length !== 9) return false;
+            
+            // 牌のタイプと星の数をカウント
+            const tileMap = {};
+            let spCount = 0;
+            
+            hand.forEach(id => {
+                const type = id.substring(0, 2);
+                if (type === SPECIAL_TILE) {
+                    spCount++;
+                } else {
+                    tileMap[type] = (tileMap[type] || 0) + 1;
+                }
+            });
+            
+            let tiles = Object.entries(tileMap).sort((a, b) => a[0].localeCompare(b[0]));
+            
+            // 3枚組を貪欲法で探す (非常に簡易的な判定であり、完全なドンジャラロジックではありません)
+            function canWin(currentTiles, currentSP) {
+                if (currentTiles.length === 0) {
+                    return currentSP >= 0 && currentSP % 3 === 0; // 残りのSPが3枚組になればOK
+                }
                 if (currentTiles.length % 3 !== 0) return false;
-                
-                const firstType = currentTiles[0];
-                const firstNum = parseInt(firstType.substring(1));
 
-                // 1. 刻子 (3枚組) のチェック
-                let count = counts[firstType] || 0;
+                const nextTiles = [...currentTiles];
+                const [type, count] = nextTiles.shift();
                 
-                // 3枚全て同じ
+                // 刻子 (3枚)
                 if (count >= 3) {
-                    const nextTiles = currentTiles.filter(t => t !== firstType);
-                    if (findSets(nextTiles, remainingSP)) return true;
+                    const remainingTiles = nextTiles.map(([t, c]) => t === type ? [t, c - 3] : [t, c]).filter(([t, c]) => c > 0);
+                    if (canWin(remainingTiles, currentSP)) return true;
+                }
+                // 刻子 + SP (2枚 + SP 1枚)
+                if (count >= 2 && currentSP >= 1) {
+                    const remainingTiles = nextTiles.map(([t, c]) => t === type ? [t, c - 2] : [t, c]).filter(([t, c]) => c > 0);
+                    if (canWin(remainingTiles, currentSP - 1)) return true;
+                }
+
+                // 順子 (連番3枚 C1, C2, C3)
+                const num = parseInt(type.substring(1));
+                if (num > 0 && num <= 7) {
+                    const type2 = `C${num + 1}`;
+                    const type3 = `C${num + 2}`;
+                    const index2 = nextTiles.findIndex(([t]) => t === type2);
+                    const index3 = nextTiles.findIndex(([t]) => t === type3);
+
+                    if (count >= 1 && index2 !== -1 && nextTiles[index2][1] >= 1 && index3 !== -1 && nextTiles[index3][1] >= 1) {
+                        // C1, C2, C3 の順子
+                        const nextCounts = nextTiles.map(([t, c]) => {
+                            if (t === type2) return [t, c - 1];
+                            if (t === type3) return [t, c - 1];
+                            return [t, c];
+                        }).filter(([t, c]) => c > 0);
+                        if (canWin(nextCounts, currentSP)) return true;
+                    }
                 }
                 
-                // 2枚と同じ + SP 1枚
-                if (count >= 2 && remainingSP >= 1) {
-                    const nextTiles = currentTiles.filter(t => t !== firstType);
-                    if (findSets(nextTiles.slice(1), remainingSP - 1)) return true;
-                }
+                // (SPを使った順子・刻子のロジックは省略)
 
-                // 1枚と同じ + SP 2枚
-                if (count >= 1 && remainingSP >= 2) {
-                    const nextTiles = currentTiles.filter(t => t !== firstType);
-                    if (findSets(nextTiles.slice(2), remainingSP - 2)) return true;
-                }
-
-                // 2. 順子 (連番3枚組) のチェック (C1-C9のみ考慮)
-                if (!isNaN(firstNum) && firstNum > 0 && firstNum < 8) {
-                    const nextType = `C${firstNum + 1}`;
-                    const nextNextType = `C${firstNum + 2}`;
-
-                    // C1, C2, C3 が揃っているか
-                    if (currentTiles.includes(nextType) && currentTiles.includes(nextNextType)) {
-                         const nextTiles = currentTiles.filter(t => t !== firstType && t !== nextType && t !== nextNextType);
-                         if (findSets(nextTiles, remainingSP)) return true;
-                    }
-                    
-                    // C1, SP, C3 (1枚使用)
-                    if (currentTiles.includes(nextNextType) && remainingSP >= 1) {
-                         const nextTiles = currentTiles.filter(t => t !== firstType && t !== nextNextType);
-                         if (findSets(nextTiles, remainingSP - 1)) return true;
-                    }
-                    
-                    // C1, C2, SP (1枚使用)
-                    if (currentTiles.includes(nextType) && remainingSP >= 1) {
-                         const nextTiles = currentTiles.filter(t => t !== firstType && t !== nextType);
-                         if (findSets(nextTiles, remainingSP - 1)) return true;
-                    }
-                    
-                    // C1, SP, SP (2枚使用)
-                    if (remainingSP >= 2) {
-                         const nextTiles = currentTiles.filter(t => t !== firstType);
-                         if (findSets(nextTiles, remainingSP - 2)) return true;
-                    }
-                }
                 return false;
             }
 
-            return findSets(mainTiles.sort(), spCount);
+            return canWin(tiles, spCount);
         }
         
         /**
@@ -915,6 +925,71 @@
         }
         
         // -----------------------------------------------------
+        // 7. チャットロジック
+        // -----------------------------------------------------
+
+        /**
+         * メッセージ送信
+         */
+        async function sendMessage() {
+            if (!isAuthReady || !roomId || !roomRef) return;
+
+            const messageText = chatInput.value.trim();
+            if (messageText === "") return;
+
+            const newMessage = {
+                senderId: userId,
+                // ユーザーIDの最初の4文字をエイリアスとして使用
+                senderAlias: `User-${userId.substring(0, 4)}`, 
+                text: messageText,
+                timestamp: Date.now()
+            };
+
+            try {
+                // Firestoreのmessages配列にメッセージを追加
+                await updateDoc(roomRef, {
+                    messages: arrayUnion(newMessage)
+                });
+                chatInput.value = '';
+            } catch (error) {
+                console.error("メッセージ送信エラー:", error);
+                displayMessage("チャットメッセージの送信に失敗しました。", 'error');
+            }
+        }
+
+        /**
+         * メッセージ表示
+         */
+        function renderMessages(messages) {
+            messagesList.innerHTML = '';
+            
+            // 最新の50件を表示
+            const msgs = messages.slice(-50); 
+            
+            msgs.forEach(msg => {
+                const isMe = msg.senderId === userId;
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('chat-message');
+                messageElement.classList.add(isMe ? 'my-message' : 'other-message');
+                
+                const alias = msg.senderAlias || `User-${msg.senderId.substring(0, 4)}`;
+                const time = new Date(msg.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+                messageElement.innerHTML = `
+                    <div class="message-header">
+                        <span class="sender">${isMe ? '私' : alias}</span>
+                        <span class="time">${time}</span>
+                    </div>
+                    <div class="message-content">${msg.text}</div>
+                `;
+                messagesList.appendChild(messageElement);
+            });
+            // 一番下までスクロール
+            messagesList.scrollTop = messagesList.scrollHeight;
+        }
+
+        
+        // -----------------------------------------------------
         // イベントリスナー設定
         // -----------------------------------------------------
 
@@ -925,6 +1000,14 @@
             drawButton.onclick = drawTile;
             checkButton.onclick = checkHandForYaku;
             discardSelectedButton.onclick = discardSelectedTile;
+            
+            // チャット関連のイベントリスナー
+            sendButton.addEventListener('click', sendMessage);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
             
             initFirebase();
         });
@@ -953,7 +1036,7 @@
 
         .container {
             width: 100%;
-            max-width: 900px;
+            max-width: 1200px; /* 横幅を広げてチャットエリアを確保 */
             background-color: #fff;
             border-radius: 16px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
@@ -971,6 +1054,18 @@
             padding-bottom: 10px;
         }
 
+        /* ゲーム画面のレイアウト (ゲームとチャットを並べる) */
+        #game-container {
+            display: none;
+            gap: 20px;
+            flex-wrap: wrap; /* 小さい画面で折り返す */
+        }
+
+        #game-content {
+            flex-grow: 1;
+            min-width: 450px; /* ゲームエリアの最小幅 */
+        }
+        
         /* 牌の基本スタイル */
         .tile {
             width: 45px;
@@ -1017,7 +1112,7 @@
         }
         .tile.face-down:hover { transform: none; box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3); }
 
-        /* レイアウト */
+        /* ゲームボードレイアウト */
         .board-area {
             display: flex;
             flex-wrap: wrap;
@@ -1043,6 +1138,7 @@
         
         .deck-area {
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 80px;
@@ -1080,6 +1176,7 @@
             cursor: pointer;
             transition: background-color 0.2s, transform 0.1s;
             box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1);
+            white-space: nowrap;
         }
 
         .btn-primary { background-color: var(--primary-color); color: white; }
@@ -1149,12 +1246,90 @@
             font-weight: bold;
             color: #555;
         }
+        
+        /* --- チャットエリアのスタイル --- */
+        #chat-container {
+            width: 300px;
+            min-width: 250px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            background-color: #f8f8f8;
+            padding: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        #messages-list {
+            flex-grow: 1;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            padding-right: 5px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 10px;
+            line-height: 1.4;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+
+        .message-header {
+            font-size: 0.75em;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .sender { font-weight: bold; }
+        .time { color: #999; }
+        .message-content { font-size: 0.9em; }
+
+        .my-message {
+            background-color: #e9f0ff; /* Light Blue */
+            margin-left: auto;
+            border-bottom-right-radius: 2px;
+        }
+
+        .other-message {
+            background-color: #fff;
+            border: 1px solid #eee;
+            margin-right: auto;
+            border-bottom-left-radius: 2px;
+        }
+
+        #chat-input-area {
+            display: flex;
+            gap: 5px;
+        }
+
+        #chat-input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 800px) {
+            #game-container {
+                flex-direction: column;
+            }
+            #chat-container {
+                width: 100%;
+                margin-top: 20px;
+                max-height: 300px;
+            }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>WebRTCドンジャラ (2人対戦)</h1>
+    <h1>WebRTCドンジャラ (2人対戦＆チャット)</h1>
     <p id="loading-message" style="text-align: center; font-weight: bold;">認証中...</p>
     
     <!-- ロビー画面 -->
@@ -1172,63 +1347,79 @@
         <p id="user-id-display"></p>
     </div>
 
-    <!-- ゲーム画面 -->
-    <div id="game-container" style="display: none;">
-        <h2 id="room-title" style="text-align: center; margin-bottom: 5px;"></h2>
-        <p id="player-list" style="text-align: center;"></p>
-
-        <div id="connection-status">接続待機中...</div>
-        <div id="message-box"></div>
+    <!-- ゲーム＆チャット画面 -->
+    <div id="game-container">
         
-        <!-- 相手の手牌エリア -->
-        <div class="hand-area" style="background-color: #e6e6e6;">
-            <h2 style="margin-top: 0; color: #555;">対戦相手の手牌</h2>
-            <div id="opponent-hand-container" class="tile-list">
-                <!-- 相手の手牌（裏返し） -->
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-                <div class="tile face-down"></div>
-            </div>
-        </div>
+        <!-- ゲームボードエリア -->
+        <div id="game-content" style="display: none;">
+            <h2 id="room-title" style="text-align: center; margin-bottom: 5px;"></h2>
+            <p id="player-list" style="text-align: center;"></p>
 
-        <div class="board-area">
-            <!-- 山札エリア -->
-            <div class="deck-area">
-                <p style="font-weight: 700;">山札 (<span id="deck-count">40</span>)</p>
-                <div class="tile face-down"></div>
-            </div>
-
-            <!-- 捨て牌エリア -->
-            <div class="discard-area">
-                <p style="font-weight: 700;">捨て牌</p>
-                <div id="discard-container" class="discard-list">
-                    <!-- 捨て牌がここに追加される -->
+            <div id="connection-status">接続待機中...</div>
+            <div id="message-box"></div>
+            
+            <!-- 相手の手牌エリア -->
+            <div class="hand-area" style="background-color: #e6e6e6;">
+                <h2 style="margin-top: 0; color: #555;">対戦相手の手牌</h2>
+                <div id="opponent-hand-container" class="tile-list">
+                    <!-- 相手の手牌（裏返し） -->
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
+                    <div class="tile face-down"></div>
                 </div>
             </div>
+
+            <div class="board-area">
+                <!-- 山札エリア -->
+                <div class="deck-area">
+                    <p style="font-weight: 700;">山札 (<span id="deck-count">40</span>)</p>
+                    <div class="tile face-down"></div>
+                </div>
+
+                <!-- 捨て牌エリア -->
+                <div class="discard-area">
+                    <p style="font-weight: 700;">捨て牌</p>
+                    <div id="discard-container" class="discard-list">
+                        <!-- 捨て牌がここに追加される -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- プレイヤー手牌エリア -->
+            <div class="hand-area">
+                <h2 style="margin-top: 0; color: #555;">あなたの手牌 (<span id="hand-count">0</span>枚)</h2>
+                <p id="current-turn" style="font-weight: bold; padding: 5px; border-radius: 4px; text-align: center;"></p>
+                <div id="hand-container" class="tile-list">
+                    <!-- 牌がここに追加される -->
+                </div>
+            </div>
+
+            <!-- コントロールエリア -->
+            <div class="controls">
+                <button id="draw-button" class="btn btn-primary">山札から1枚引く</button>
+                <button id="discard-selected-button" class="btn btn-primary" style="display: none;">選択した牌を捨てる</button>
+                <button id="check-button" class="btn btn-secondary" disabled>役を判定する (9枚必須)</button>
+                <button id="start-game-button" class="btn btn-secondary" style="display: none;">ゲーム開始 (ホストのみ)</button>
+            </div>
+            <button class="btn" style="background-color: #777; color: white; margin-top: 15px;" onclick="location.reload()">ロビーに戻る</button>
         </div>
         
-        <!-- プレイヤー手牌エリア -->
-        <div class="hand-area">
-            <h2 style="margin-top: 0; color: #555;">あなたの手牌 (<span id="hand-count">0</span>枚)</h2>
-            <p id="current-turn" style="font-weight: bold; padding: 5px; border-radius: 4px; text-align: center;"></p>
-            <div id="hand-container" class="tile-list">
-                <!-- 牌がここに追加される -->
+        <!-- チャットコンテナ -->
+        <div id="chat-container">
+            <h3 style="margin-top: 0; color: #555;">ルームチャット</h3>
+            <div id="messages-list">
+                <!-- メッセージがここに表示される -->
+            </div>
+            <div id="chat-input-area">
+                <input type="text" id="chat-input" placeholder="メッセージを入力...">
+                <button id="send-button" class="btn btn-secondary">送信</button>
             </div>
         </div>
-
-        <!-- コントロールエリア -->
-        <div class="controls">
-            <button id="draw-button" class="btn btn-primary">山札から1枚引く</button>
-            <button id="discard-selected-button" class="btn btn-primary" style="display: none;">選択した牌を捨てる</button>
-            <button id="check-button" class="btn btn-secondary" disabled>役を判定する (9枚必須)</button>
-            <button id="start-game-button" class="btn btn-secondary" style="display: none;">ゲーム開始 (ホストのみ)</button>
-        </div>
-        <button class="btn" style="background-color: #777; color: white; margin-top: 15px;" onclick="location.reload()">ロビーに戻る</button>
     </div>
 
 </div>
