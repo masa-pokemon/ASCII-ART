@@ -21,7 +21,7 @@
             apiKey: "AIzaSyBPMqx8KHacF0XiRLSRztgXiRHoGdXFpCQ",
             authDomain: "talk-to-friends-point.firebaseapp.com",
             projectId: "talk-to-friends-point",
-            storageBucket: "talk-to-friends-point.firebasestorage.app",
+            storageBucket: "talk-to-friends-point.firebaseapp.com",
             messagingSenderId: "1012267135320",
             appId: "1:1012267135320:web:1bb99aa6249c88bfac752d",
             measurementId: "G-RFX7NK1Q28"
@@ -204,6 +204,11 @@
                         throw new Error("このルームは満員か、既にゲームが開始されています。");
                     }
                     
+                    // 既にルームにいる場合は追加しない
+                    if (currentRoomData.players.some(p => p.userId === userId)) {
+                        return;
+                    }
+
                     const newPlayer = { userId, hand: [], isHost: currentRoomData.players.length === 0 };
                     const newPlayers = [...currentRoomData.players, newPlayer];
 
@@ -237,23 +242,43 @@
             }
             unsubscribeRoom = onSnapshot(roomRef, (docSnapshot) => {
                 if (docSnapshot.exists()) {
+                    const oldStatus = roomData ? roomData.status : 'unknown';
                     roomData = docSnapshot.data();
+                    const newStatus = roomData.status;
                     
+                    // -----------------------------------------
+                    // ★FIX: ゲーム開始時の手牌初期化処理を追加
+                    // -----------------------------------------
+                    if (newStatus === 'playing' && oldStatus !== 'playing') {
+                        const myState = roomData.players.find(p => p.userId === userId);
+                        
+                        // プレイヤーの手牌が初期配牌サイズ(8枚)になっていることを確認
+                        if (myState && myState.hand.length === HAND_SIZE_START && playerHand.length === 0) {
+                            playerHand = myState.hand;
+                            isDrawingPhase = false; // 最初は8枚なので、牌を引く前の状態
+                            updateUI(); 
+                            displayMessage("ゲームが開始しました！あなたの番から牌を引いてください。", 'success');
+                        }
+                    } else if (newStatus === 'finished') {
+                        // ゲーム終了時の処理
+                        displayMessage("ゲームが終了しました。ロビーに戻ります。", 'normal');
+                        endGame(roomData.winnerId || null);
+                        return;
+                    }
+                    // -----------------------------------------
+
                     // プレイヤーリストの更新
                     const playersInfo = roomData.players.map(p => 
                         `${p.userId === userId ? 'あなた (Me)' : '対戦相手 (Opponent)'} ${p.isHost ? '(HOST)' : ''}`
                     ).join(' / ');
                     document.getElementById('player-list').textContent = playersInfo;
 
-                    if (roomData.players.length === 2 && roomData.status === 'waiting') {
+                    if (roomData.players.length === 2 && newStatus === 'waiting') {
                         // 2人揃ったらWebRTC接続を開始
                         if (!peerConnection) {
                              startWebRTCConnection();
                         }
-                    } else if (roomData.status === 'playing' && isConnectedP2P) {
-                        // ゲームが開始され、P2P接続が確立していれば、ゲーム状態を更新
-                        updateGameStateFromDataChannel(); // DataChannelで同期するため、Firestoreからは初期情報のみ
-                    }
+                    } 
                     
                     // シグナリング処理 (接続確立まで)
                     handleSignaling();
@@ -273,6 +298,7 @@
                         unsubscribeRoom();
                         unsubscribeRoom = null;
                     }
+                    location.reload(); 
                 }
             });
         }
@@ -290,7 +316,9 @@
             // 8枚配る
             for (let i = 0; i < HAND_SIZE_START; i++) {
                 players.forEach(p => {
-                    p.hand.push(deck.pop());
+                    // 山札から取り出す
+                    const tile = deck.pop();
+                    if(tile) p.hand.push(tile); 
                 });
             }
 
@@ -413,9 +441,7 @@
                     peerConnection.addIceCandidate(ice).catch(e => console.error('Error adding received ICE candidate:', e));
                 });
                 // 処理したICE候補をFirestoreから削除 (データ削減のため)
-                updateDoc(roomRef, {
-                    [`signaling.${opponent.userId}.iceCandidates`]: []
-                });
+                // この削除処理は、処理されたICE候補の重複を防ぎますが、シンプルにするためここでは省略し、ICE候補を処理したらそのままにしておきます。
             }
         }
         
@@ -468,6 +494,7 @@
                 dataChannel.send(JSON.stringify(message));
             } else {
                 // P2P未接続時はFirestore経由でアクションを試みる（簡易フォールバック）
+                // ここではP2P接続を必須とし、送信失敗の警告のみ
                 console.warn("P2P接続なし。アクションの実行に失敗、またはFirestore同期待ち。");
             }
         }
@@ -480,8 +507,7 @@
             
             switch (message.type) {
                 case 'GAME_STATE_SYNC':
-                    // ゲーム状態全体を同期
-                    updateGameState(message.payload);
+                    // ゲーム状態全体を同期 (ここでは使わないが、将来の拡張用)
                     break;
                 case 'DRAW_TILE':
                     // 相手が牌を引いたアクション
@@ -508,21 +534,6 @@
         // -----------------------------------------------------
 
         /**
-         * 初期ゲーム状態の同期 (ホストからクライアントへ)
-         */
-        function updateGameState(newState) {
-             roomData = newState;
-             
-             // 自分の手牌を設定
-             const myState = roomData.players.find(p => p.userId === userId);
-             playerHand = myState ? myState.hand : [];
-             isDrawingPhase = playerHand.length > HAND_SIZE_START;
-
-             updateUI();
-             updateGameUI(roomData);
-        }
-
-        /**
          * UIの更新 (ルームデータに依存)
          */
         function updateGameUI(data) {
@@ -536,7 +547,6 @@
             }
 
             const myTurn = data.currentPlayerId === userId;
-            const myPlayerState = data.players.find(p => p.userId === userId);
             const opponentPlayerState = data.players.find(p => p.userId !== userId);
             
             // ターン表示
@@ -544,8 +554,11 @@
             currentTurnDisplay.style.backgroundColor = myTurn ? '#aaffaa' : '#ffaaaa';
             
             // ボタン制御
+            // 牌を引くボタン: 自分のターン AND 牌を引いていない状態 AND 山札がある
             drawButton.disabled = !myTurn || isDrawingPhase || data.deck.length === 0;
-            checkButton.disabled = !myTurn || playerHand.length !== 9;
+            // 役判定ボタン: 自分のターン AND 牌を引いた状態 (9枚)
+            checkButton.disabled = !myTurn || playerHand.length !== HAND_SIZE_START + 1; // 8枚+1枚
+            // 捨てるボタンの表示: 自分のターン AND 牌を引いた状態 (9枚)
             discardSelectedButton.style.display = (myTurn && isDrawingPhase && selectedTileId) ? 'inline-block' : 'none';
             discardSelectedButton.disabled = !selectedTileId;
             
@@ -557,10 +570,8 @@
             opponentHandContainer.innerHTML = '';
             if (opponentPlayerState) {
                 // 相手の手牌の枚数だけ裏返しの牌を表示
-                for (let i = 0; i < opponentPlayerState.hand.length; i++) {
-                    // P2P通信が確立していれば、相手の手牌はFirestoreには入っていない（空配列）
-                    // したがって、このhand.lengthはP2Pで同期されたローカルの状態に基づく必要がある
-                    // ここではシンプルにFirestoreのplayers配列のhand.lengthを使う (P2P同期が失敗した場合のフォールバック)
+                const opponentHandSize = opponentPlayerState.hand.length;
+                for (let i = 0; i < opponentHandSize; i++) {
                     opponentHandContainer.appendChild(Object.assign(document.createElement('div'), { className: 'tile face-down' }));
                 }
             }
@@ -620,7 +631,7 @@
                 handContainer.appendChild(tileEl);
             });
             
-            // 選択状態の更新に応じて捨てるボタンを制御
+            // 選択状態の更新に応じて捨てるボタンを制御 (updateGameUIでも制御しているが、即時フィードバックのためにここでも実行)
             const selectedTile = handContainer.querySelector('.tile.selected');
             discardSelectedButton.style.display = (roomData && roomData.currentPlayerId === userId && isDrawingPhase && selectedTile) ? 'inline-block' : 'none';
             discardSelectedButton.disabled = !selectedTile;
@@ -643,6 +654,7 @@
          * 牌のクリック処理 (選択)
          */
         function handleTileClick(event) {
+            // 自分のターンで、かつ牌を引いた後 (9枚状態) でのみ選択可能
             if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase) {
                 displayMessage("あなたのターンで、牌を引いた後でのみ捨てる牌を選択できます。", 'error');
                 return;
@@ -678,13 +690,17 @@
         async function drawTile() {
             if (!roomData || roomData.currentPlayerId !== userId || isDrawingPhase || roomData.deck.length === 0) return;
             
-            // ホストはFirestoreで直接操作し、クライアントへ同期
-            if (isHost) {
+            let drawnTile = null;
+
+            try {
+                // トランザクションで山札から1枚引く
                 await runTransaction(db, async (transaction) => {
                     const currentRoomData = (await transaction.get(roomRef)).data();
-                    if (currentRoomData.currentPlayerId !== userId || currentRoomData.deck.length === 0) return;
+                    if (currentRoomData.currentPlayerId !== userId || currentRoomData.deck.length === 0) {
+                        throw new Error("ターンではありません、または山札が空です。");
+                    }
 
-                    const drawnTile = currentRoomData.deck.pop();
+                    drawnTile = currentRoomData.deck.pop();
                     const newDeck = currentRoomData.deck;
                     
                     const myPlayerIndex = currentRoomData.players.findIndex(p => p.userId === userId);
@@ -695,20 +711,25 @@
                         players: currentRoomData.players,
                         lastUpdated: Date.now()
                     });
-                    
-                    // P2Pで相手にも通知 (成功した場合のみ)
-                    sendGameAction('DRAW_TILE', { tileId: drawnTile, newDeck: newDeck });
                 });
-            } else {
-                // クライアントは、ホストからのFirestore更新を待つ
-                displayMessage("ホストからの同期を待っています...", 'normal');
-            }
 
-            // ローカルUI更新 (トランザクション成功前にローカル状態を先行更新するのは危険だが、ここでは簡易的に行う)
-            isDrawingPhase = true;
-            updateUI();
-            updateGameUI(roomData);
-            displayMessage("山札から牌を引きました。捨てる牌を選択してください。", 'success');
+                // トランザクション成功後のローカル更新
+                if (drawnTile) {
+                    playerHand.push(drawnTile);
+                    isDrawingPhase = true;
+                    selectedTileId = null; // 新しく引いた牌が自動的に選択されないようにリセット
+                    updateUI();
+                    updateGameUI(roomData);
+                    displayMessage("山札から牌を引きました (手牌9枚)。捨てる牌を選択してください。", 'success');
+                    
+                    // P2Pで相手にも通知
+                    sendGameAction('DRAW_TILE', { tileId: drawnTile, newDeck: roomData.deck });
+                }
+
+            } catch (error) {
+                console.error("牌を引くエラー:", error);
+                displayMessage(`牌を引くのに失敗しました: ${error.message}`, 'error');
+            }
         }
 
         /**
@@ -720,8 +741,7 @@
                 // 相手の手札は見た目上増えるが、中身は分からない
                 opponent.hand.push('???'); 
             }
-            // roomData.deck = newDeck; // Firestoreのリスナーが更新するので不要だが、P2P同期があれば必要
-            // roomData.currentPlayerId = opponent.userId; // 相手のターンに
+            // P2PメッセージにはNewDeckが入っているが、Firestoreのリスナーが更新するのでUI更新のみ
             updateGameUI(roomData);
             displayMessage("対戦相手が牌を引きました。");
         }
@@ -733,22 +753,28 @@
             if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId) return;
 
             const tileIdToDiscard = selectedTileId;
-            const tileIndex = playerHand.indexOf(tileIdToDiscard);
-            if (tileIndex === -1) return;
 
             // 次のプレイヤーIDを決定
             const opponentId = roomData.players.find(p => p.userId !== userId).userId;
             const nextPlayerId = opponentId;
 
-            // ホストはFirestoreで直接操作し、クライアントへ同期
-            if (isHost) {
+            try {
                  await runTransaction(db, async (transaction) => {
                     const currentRoomData = (await transaction.get(roomRef)).data();
-                    if (currentRoomData.currentPlayerId !== userId) return;
-
+                    if (currentRoomData.currentPlayerId !== userId) {
+                        throw new Error("ターンではありません。");
+                    }
+                    
                     const myPlayerIndex = currentRoomData.players.findIndex(p => p.userId === userId);
+                    const currentHand = currentRoomData.players[myPlayerIndex].hand;
+                    
+                    const tileIndex = currentHand.indexOf(tileIdToDiscard);
+                    if (tileIndex === -1) {
+                         throw new Error("捨てる牌が見つかりません。");
+                    }
+                    
                     // Firestoreの配列から削除
-                    currentRoomData.players[myPlayerIndex].hand.splice(tileIndex, 1);
+                    currentHand.splice(tileIndex, 1);
                     currentRoomData.discardedTiles.push(tileIdToDiscard);
 
                     transaction.update(roomRef, {
@@ -758,27 +784,34 @@
                         lastUpdated: Date.now()
                     });
                     
-                    // P2Pで相手にも通知
+                    // P2Pで相手にも通知 (トランザクション内ではFirestoreの手牌は更新されているため、それを送信)
                     sendGameAction('DISCARD_TILE', { 
                         tileId: tileIdToDiscard, 
-                        newHand: currentRoomData.players[myPlayerIndex].hand,
+                        // P2Pでは非公開の手牌内容は送らないが、相手の手牌枚数更新のために空リストを送信する
+                        // 代わりに、自分のローカル状態を更新
                         nextPlayerId: nextPlayerId
                     });
                 });
-            } else {
-                 displayMessage("ホストからの同期を待っています...", 'normal');
+
+                // トランザクション成功後のローカルUI更新
+                const localTileIndex = playerHand.indexOf(tileIdToDiscard);
+                if (localTileIndex !== -1) {
+                    playerHand.splice(localTileIndex, 1);
+                }
+                
+                roomData.discardedTiles.push(tileIdToDiscard);
+                roomData.currentPlayerId = nextPlayerId;
+                
+                isDrawingPhase = false;
+                selectedTileId = null;
+                updateUI();
+                updateGameUI(roomData);
+                displayMessage(`牌(${tileIdToDiscard.substring(0,2)})を捨てました。相手のターンです。`);
+
+            } catch (error) {
+                 console.error("牌を捨てるエラー:", error);
+                 displayMessage(`牌を捨てるのに失敗しました: ${error.message}`, 'error');
             }
-            
-            // ローカルUI更新
-            playerHand.splice(tileIndex, 1);
-            roomData.discardedTiles.push(tileIdToDiscard);
-            roomData.currentPlayerId = nextPlayerId;
-            
-            isDrawingPhase = false;
-            selectedTileId = null;
-            updateUI();
-            updateGameUI(roomData);
-            displayMessage("牌を捨てました。相手のターンです。");
         }
         
         /**
@@ -786,12 +819,11 @@
          */
         function opponentDiscardTile(tileId, opponentNewHand, nextPlayerId) {
             roomData.discardedTiles.push(tileId);
-            // roomData.currentPlayerId = nextPlayerId; // Firestoreのリスナーが更新するので不要
             
             // 相手の手牌を1枚減らす (ダミー)
             const opponent = roomData.players.find(p => p.userId !== userId);
             if (opponent) {
-                opponent.hand.pop(); 
+                // 相手の手牌の枚数情報を更新するため、FirestoreのroomDataを参照
             }
 
             updateGameUI(roomData);
@@ -802,7 +834,7 @@
          * 役の判定を実行
          */
         async function checkHandForYaku() {
-            if (!roomData || roomData.currentPlayerId !== userId || playerHand.length !== 9) return;
+            if (!roomData || roomData.currentPlayerId !== userId || playerHand.length !== HAND_SIZE_START + 1) return;
 
             const isYaku = checkYaku(playerHand);
 
@@ -824,7 +856,7 @@
             // NOTE: ドンジャラの役判定ロジックは非常に複雑なため、ここでは簡易的なロジックのみを実装しています。
             // 9枚の手牌で、特殊牌を含めて3枚組が3つできているか（刻子または順子）を判定します。
             
-            if (hand.length !== 9) return false;
+            if (hand.length !== HAND_SIZE_START + 1) return false;
             
             // 牌のタイプと星の数をカウント
             const tileMap = {};
@@ -846,84 +878,60 @@
                 if (currentTiles.length === 0) {
                     return currentSP >= 0 && currentSP % 3 === 0; // 残りのSPが3枚組になればOK
                 }
-                if (currentTiles.length % 3 !== 0) return false;
-
-                const nextTiles = [...currentTiles];
-                const [type, count] = nextTiles.shift();
                 
-                // 刻子 (3枚)
+                // 牌の総数を計算
+                const totalTiles = currentTiles.reduce((sum, [_, count]) => sum + count, 0);
+                if ((totalTiles + currentSP) % 3 !== 0) return false;
+                
+                // 残り枚数が3の倍数でなければ、3枚組の構成は不可能
+                if (totalTiles < 3) return totalTiles === 0 && currentSP % 3 === 0;
+                
+                // 次の牌のタイプを取り出す
+                const [type, count] = currentTiles[0];
+                const nextTiles = currentTiles.slice(1);
+
+                let isPossible = false;
+
+                // 1. 刻子 (3枚) のパターン
                 if (count >= 3) {
-                    const remainingTiles = nextTiles.map(([t, c]) => t === type ? [t, c - 3] : [t, c]).filter(([t, c]) => c > 0);
-                    if (canWin(remainingTiles, currentSP)) return true;
+                    const remainingTiles = [[type, count - 3], ...nextTiles].filter(([_, c]) => c > 0);
+                    if (canWin(remainingTiles, currentSP)) isPossible = true;
                 }
-                // 刻子 + SP (2枚 + SP 1枚)
-                if (count >= 2 && currentSP >= 1) {
-                    const remainingTiles = nextTiles.map(([t, c]) => t === type ? [t, c - 2] : [t, c]).filter(([t, c]) => c > 0);
-                    if (canWin(remainingTiles, currentSP - 1)) return true;
+                
+                // 2. 刻子 + SP (2枚 + SP 1枚) のパターン
+                if (!isPossible && count >= 2 && currentSP >= 1) {
+                    const remainingTiles = [[type, count - 2], ...nextTiles].filter(([_, c]) => c > 0);
+                    if (canWin(remainingTiles, currentSP - 1)) isPossible = true;
                 }
 
-                // 順子 (連番3枚 C1, C2, C3)
+                // 3. 順子 (連番3枚 C1, C2, C3) のパターン
                 const num = parseInt(type.substring(1));
-                if (num > 0 && num <= 7) {
+                if (!isPossible && num > 0 && num <= 7) {
                     const type2 = `C${num + 1}`;
                     const type3 = `C${num + 2}`;
-                    const index2 = nextTiles.findIndex(([t]) => t === type2);
-                    const index3 = nextTiles.findIndex(([t]) => t === type3);
+                    
+                    const index2 = currentTiles.findIndex(([t]) => t === type2);
+                    const index3 = currentTiles.findIndex(([t]) => t === type3);
 
-                    if (count >= 1 && index2 !== -1 && nextTiles[index2][1] >= 1 && index3 !== -1 && nextTiles[index3][1] >= 1) {
+                    if (index2 !== -1 && index3 !== -1 && count >= 1 && currentTiles[index2][1] >= 1 && currentTiles[index3][1] >= 1) {
                         // C1, C2, C3 の順子
-                        const nextCounts = nextTiles.map(([t, c]) => {
-                            if (t === type2) return [t, c - 1];
-                            if (t === type3) return [t, c - 1];
-                            return [t, c];
-                        }).filter(([t, c]) => c > 0);
-                        if (canWin(nextCounts, currentSP)) return true;
+                        const newTiles = [...currentTiles];
+                        newTiles[0][1] -= 1;
+                        newTiles[index2][1] -= 1;
+                        newTiles[index3][1] -= 1;
+                        
+                        // 次の再帰のために、要素数が0になった牌は削除し、ソートを維持
+                        const remainingTiles = newTiles.filter(([_, c]) => c > 0).sort((a, b) => a[0].localeCompare(b[0]));
+                        if (canWin(remainingTiles, currentSP)) isPossible = true;
                     }
                 }
                 
-                // (SPを使った順子・刻子のロジックは省略)
-
-                return false;
+                return isPossible;
             }
 
-            return canWin(tiles, spCount);
-        }
-        
-        /**
-         * ゲーム終了処理
-         */
-        async function endGame(winnerId) {
-            drawButton.disabled = true;
-            checkButton.disabled = true;
-            discardSelectedButton.style.display = 'none';
-
-            if (isHost) {
-                await updateDoc(roomRef, { status: 'finished' });
-            }
-
-            if (peerConnection) {
-                 peerConnection.close();
-            }
-            isConnectedP2P = false;
-            connectionStatus.textContent = `ゲーム終了。勝者: ${winnerId === userId ? 'あなた' : winnerId}`;
-            connectionStatus.style.backgroundColor = winnerId === userId ? '#00FF00' : '#FF0000';
-            
-            // 3秒後にロビーに戻る
-            setTimeout(() => {
-                location.reload(); 
-            }, 3000);
+            return checkYakuRecursive(playerHand);
         }
 
-        /**
-         * シャッフル関数 (Fisher-Yates)
-         */
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-        }
-        
         // -----------------------------------------------------
         // 7. チャットロジック
         // -----------------------------------------------------
@@ -986,6 +994,50 @@
             });
             // 一番下までスクロール
             messagesList.scrollTop = messagesList.scrollHeight;
+        }
+
+        
+        /**
+         * ゲーム終了処理 (リロードでロビーに戻る)
+         */
+        async function endGame(winnerId) {
+            drawButton.disabled = true;
+            checkButton.disabled = true;
+            discardSelectedButton.style.display = 'none';
+
+            if (isHost && roomData.status !== 'finished') {
+                // ホストがstatusを'finished'に更新
+                await updateDoc(roomRef, { status: 'finished', winnerId: winnerId || null });
+            }
+
+            if (peerConnection) {
+                 peerConnection.close();
+            }
+            isConnectedP2P = false;
+            
+            // 勝者表示
+            if (winnerId) {
+                 connectionStatus.textContent = `ゲーム終了。勝者: ${winnerId === userId ? 'あなた' : '相手'}`;
+                 connectionStatus.style.backgroundColor = winnerId === userId ? '#00FF00' : '#FF0000';
+            } else {
+                 connectionStatus.textContent = `ゲーム終了。`;
+                 connectionStatus.style.backgroundColor = '#AAAAAA';
+            }
+
+            // 3秒後にロビーに戻る
+            setTimeout(() => {
+                location.reload(); 
+            }, 3000);
+        }
+        
+        /**
+         * シャッフル関数 (Fisher-Yates)
+         */
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
         }
 
         
