@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firebaseドンジャラ - 2人対戦＆チャット</title>
+    <title>Firebase野球ドンジャラ - 2人対戦＆チャット</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <script type="module">
         // Firebaseのインポート
@@ -49,11 +49,20 @@
         let isDrawingPhase = false; // true: 牌を引いた直後 (9枚状態), false: 牌を捨てた直後 (8枚状態)
         let selectedTileId = null;
 
-        // ゲーム定数
-        const TILE_TYPES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9'];
-        const SPECIAL_TILE = 'SP';
-        const TILES_PER_TYPE = 4;
+        // ゲーム定数 (野球ドンジャラ仕様)
+        const TILE_TYPES = [
+            'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9'
+        ]; // 野球ポジション 1〜9 (投手〜ライト)
+        const TILE_NAMES = {
+            'P1': '投', 'P2': '捕', 'P3': '一', 'P4': '二', 'P5': '三', 'P6': '遊', 'P7': '左', 'P8': '中', 'P9': '右'
+        };
+        const SPECIAL_TILE = 'OT'; // 大谷牌
+        const SPECIAL_TILE_NAME = '大谷';
+
+        const TILES_PER_TYPE = 5; // 通常牌は各5枚
+        const SPECIAL_TILES_COUNT = 3; // 大谷牌は3枚
         const HAND_SIZE_START = 8;
+        const HAND_SIZE_WIN = 9;
 
         // DOM要素の取得
         const lobbyContainer = document.getElementById('lobby-container');
@@ -124,17 +133,20 @@
         }
 
         /**
-         * ルームデータ構造を初期化
+         * ルームデータ構造を初期化 (野球ドンジャラ牌構成)
          */
         function createInitialRoomData() {
             // 全ての牌を生成
             let initialDeck = [];
+            
+            // 通常牌 (P1-P9 各5枚)
             for (const type of TILE_TYPES) {
                 for (let i = 1; i <= TILES_PER_TYPE; i++) {
                     initialDeck.push(`${type}-${i}`);
                 }
             }
-            for (let i = 1; i <= TILES_PER_TYPE; i++) {
+            // 大谷牌 (OT 各3枚)
+            for (let i = 1; i <= SPECIAL_TILES_COUNT; i++) {
                  initialDeck.push(`${SPECIAL_TILE}-${i}`);
             }
             shuffle(initialDeck);
@@ -269,14 +281,14 @@
                          // ゲームが開始されたらメッセージ表示
                          displayMessage("ゲームが開始しました！手牌を整理し、あなたの番から牌を引いてください。", 'success');
                          // 9枚状態のフラグ設定
-                         isDrawingPhase = playerHand.length > HAND_SIZE_START;
+                         isDrawingPhase = playerHand.length >= HAND_SIZE_WIN;
                     } 
                     
                     // ターン切り替え時のisDrawingPhase更新
                     if (oldData && oldData.currentPlayerId !== roomData.currentPlayerId) {
                          if (roomData.currentPlayerId === userId) {
                              // 自分のターンになった時、手牌の枚数に応じてフェーズを設定
-                             isDrawingPhase = playerHand.length > HAND_SIZE_START; // 9枚ならtrue
+                             isDrawingPhase = playerHand.length >= HAND_SIZE_WIN; // 9枚ならtrue
                              displayMessage("あなたのターンです。", 'success');
                              selectedTileId = null; // ターンが変わったら選択解除
                          } else {
@@ -405,9 +417,9 @@
             
             // ボタン制御
             // 牌を引くボタン: 自分のターン AND 牌を引いていない状態 AND 山札がある
-            drawButton.disabled = !myTurn || isDrawingPhase || data.deck.length === 0;
+            drawButton.disabled = !myTurn || isDrawingPhase || data.deck.length === 0 || playerHand.length >= HAND_SIZE_WIN;
             // 役判定ボタン: 自分のターン AND 牌を引いた状態 (9枚)
-            checkButton.disabled = !myTurn || playerHand.length !== HAND_SIZE_START + 1; // 8枚+1枚
+            checkButton.disabled = !myTurn || playerHand.length !== HAND_SIZE_WIN; // 8枚+1枚
             // 捨てるボタンの表示: 自分のターン AND 牌を引いた状態 (9枚)
             discardSelectedButton.style.display = (myTurn && isDrawingPhase) ? 'inline-block' : 'none';
             discardSelectedButton.disabled = !selectedTileId;
@@ -436,7 +448,15 @@
         function updateUI() {
             // 手牌の表示更新
             handContainer.innerHTML = '';
-            playerHand.sort((a, b) => a.localeCompare(b));
+            // 牌のソート (P1-P9, OT の順で)
+            playerHand.sort((a, b) => {
+                const typeA = a.substring(0, 2);
+                const typeB = b.substring(0, 2);
+                if (typeA === SPECIAL_TILE && typeB !== SPECIAL_TILE) return 1;
+                if (typeA !== SPECIAL_TILE && typeB === SPECIAL_TILE) return -1;
+                return a.localeCompare(b);
+            });
+
             playerHand.forEach(tileId => {
                 const tileEl = createTileElement(tileId);
                 if (tileId === selectedTileId) {
@@ -462,8 +482,15 @@
             const tile = document.createElement('div');
             tile.className = 'tile';
             tile.setAttribute('data-id', tileId);
-            tile.setAttribute('data-type', tileId.substring(0, 2));
-            tile.textContent = tileId.substring(1, 2) === 'P' ? '★' : tileId.substring(1, 2);
+            const type = tileId.substring(0, 2);
+            tile.setAttribute('data-type', type);
+            
+            if (type === SPECIAL_TILE) {
+                tile.textContent = SPECIAL_TILE_NAME;
+                tile.classList.add('special-tile');
+            } else {
+                tile.textContent = TILE_NAMES[type] || type; // ポジション名を表示
+            }
 
             if (selectable) {
                 tile.addEventListener('click', handleTileClick);
@@ -505,7 +532,8 @@
                 // 新しく選択
                 tileElement.classList.add('selected');
                 selectedTileId = tileId;
-                displayMessage(`${tileId.substring(0, 2)}の牌を選択しました。この牌を捨てるか、役判定を行ってください。`);
+                const tileDisplayName = (tileId.startsWith(SPECIAL_TILE)) ? SPECIAL_TILE_NAME : TILE_NAMES[tileId.substring(0, 2)];
+                displayMessage(`${tileDisplayName}の牌を選択しました。この牌を捨てるか、役判定を行ってください。`);
             } else {
                 displayMessage("捨てる牌を選択してください。");
             }
@@ -520,7 +548,7 @@
          * 山札から牌を引く
          */
         async function drawTile() {
-            if (!roomData || roomData.currentPlayerId !== userId || isDrawingPhase || roomData.deck.length === 0) return;
+            if (!roomData || roomData.currentPlayerId !== userId || isDrawingPhase || roomData.deck.length === 0 || playerHand.length >= HAND_SIZE_WIN) return;
             
             try {
                 // トランザクションで山札から1枚引く
@@ -559,14 +587,14 @@
          * 選択した牌を捨てる
          */
         async function discardSelectedTile() {
-            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId) return;
+            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId || playerHand.length !== HAND_SIZE_WIN) return;
 
             const tileIdToDiscard = selectedTileId;
 
             try {
                  await runTransaction(db, async (transaction) => {
                     const currentRoomData = (await transaction.get(roomRef)).data();
-                    if (currentRoomData.currentPlayerId !== userId || currentRoomData.players[myPlayerIndex].hand.length !== HAND_SIZE_START + 1) {
+                    if (currentRoomData.currentPlayerId !== userId || currentRoomData.players[myPlayerIndex].hand.length !== HAND_SIZE_WIN) {
                         throw new Error("ターンではありません、または手牌が9枚ではありません。");
                     }
                     
@@ -598,7 +626,8 @@
                 selectedTileId = null;
                 updateUI();
                 updateGameUI(roomData);
-                displayMessage(`牌(${tileIdToDiscard.substring(0,2)})を捨てました。相手のターンです。`);
+                const tileDisplayName = (tileIdToDiscard.startsWith(SPECIAL_TILE)) ? SPECIAL_TILE_NAME : TILE_NAMES[tileIdToDiscard.substring(0, 2)];
+                displayMessage(`${tileDisplayName}を捨てました。相手のターンです。`);
 
             } catch (error) {
                  console.error("牌を捨てるエラー:", error);
@@ -610,7 +639,7 @@
          * 役の判定を実行
          */
         async function checkHandForYaku() {
-            if (!roomData || roomData.currentPlayerId !== userId || playerHand.length !== HAND_SIZE_START + 1) return;
+            if (!roomData || roomData.currentPlayerId !== userId || playerHand.length !== HAND_SIZE_WIN) return;
 
             const isYaku = checkYaku(playerHand);
 
@@ -630,10 +659,10 @@
          * 役の判定 (9枚の手牌から1枚を選び、残りの8枚が3枚組2つと2枚組1つで構成可能かを簡易判定)
          */
         function checkYaku(hand) {
-            // NOTE: ドンジャラの役判定ロジックは非常に複雑なため、ここでは簡易的なロジックのみを実装しています。
             // 9枚の手牌で、1枚を捨てた残り8枚が「3枚組×2」と「雀頭(2枚組)×1」で構成可能かを判定します。
+            // 大谷牌はオールマイティとして使用可能。
 
-            if (hand.length !== HAND_SIZE_START + 1) return false;
+            if (hand.length !== HAND_SIZE_WIN) return false;
             
             // 9枚の手牌から1枚ずつ選び、残りの8枚で役判定
             for (let i = 0; i < hand.length; i++) {
@@ -653,34 +682,68 @@
 
              // 牌の種類とその枚数をカウント
              const counts = {};
+             let otaniCount = 0;
              hand.forEach(id => {
                  const type = id.substring(0, 2);
-                 counts[type] = (counts[type] || 0) + 1;
+                 if (type === SPECIAL_TILE) {
+                     otaniCount++;
+                 } else {
+                     counts[type] = (counts[type] || 0) + 1;
+                 }
              });
 
-             const uniqueTypes = Object.keys(counts);
+             const uniqueTypes = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+             const allTypes = [...uniqueTypes, SPECIAL_TILE];
 
              // 雀頭（2枚組）を探す
-             for (const headType of uniqueTypes) {
-                 if (counts[headType] >= 2) {
-                     // 雀頭を仮決定し、残りの6枚（3枚組×2）で構成可能かチェック
-                     counts[headType] -= 2;
-                     
-                     // 雀頭を除いた牌リストを作成
+             for (const headType of allTypes) {
+                 let tempOtaniCount = otaniCount;
+                 let canFormHead = false;
+
+                 if (headType === SPECIAL_TILE) {
+                     // 雀頭を大谷牌2枚で構成 (ありえないが念のため)
+                     if (tempOtaniCount >= 2) {
+                         tempOtaniCount -= 2;
+                         canFormHead = true;
+                     }
+                 } else {
+                     // 雀頭を通常牌2枚で構成
+                     if (counts[headType] >= 2) {
+                         counts[headType] -= 2;
+                         canFormHead = true;
+                     } 
+                     // 雀頭を通常牌1枚+大谷牌1枚で構成
+                     else if (counts[headType] >= 1 && tempOtaniCount >= 1) {
+                         counts[headType] -= 1;
+                         tempOtaniCount -= 1;
+                         canFormHead = true;
+                     } 
+                 }
+                 
+                 if (canFormHead) {
+                     // 雀頭を除いた残りの6枚（3枚組×2）で構成可能かチェック
                      const remainingTiles = [];
                      for (const type of uniqueTypes) {
                           for (let i = 0; i < counts[type]; i++) {
-                              remainingTiles.push(type);
+                              remainingTiles.push(type); // 牌タイプのみを渡す
                           }
                      }
                      
                      // 残り6枚（3枚組×2）で構成可能か再帰的にチェック
-                     if (canFormSets(remainingTiles)) {
+                     if (canFormSets(remainingTiles, tempOtaniCount)) {
                           return true;
                      }
                      
-                     // バックトラック
-                     counts[headType] += 2;
+                     // バックトラック (countsとtempOtaniCountを元に戻す)
+                     if (headType === SPECIAL_TILE) {
+                         // なし
+                     } else if (counts[headType] <= (TILES_PER_TYPE - 2) && canFormHead && tempOtaniCount !== otaniCount) {
+                         counts[headType] += 1;
+                         // 大谷牌を1枚使った場合
+                     } else if (counts[headType] <= (TILES_PER_TYPE - 1) && canFormHead && tempOtaniCount === otaniCount) {
+                         counts[headType] += 2;
+                         // 大谷牌を使わなかった場合
+                     }
                  }
              }
 
@@ -688,11 +751,11 @@
         }
         
         /**
-         * 残りの手牌が全て3枚組で構成可能かをチェック (6枚用)
+         * 残りの手牌が全て3枚組で構成可能かをチェック (6枚用) - 大谷牌対応版
          */
-        function canFormSets(tiles) {
-             if (tiles.length === 0) return true;
-             if (tiles.length % 3 !== 0) return false; // 6枚または3枚の倍数であること
+        function canFormSets(tiles, otaniCount) {
+             if (tiles.length === 0) return otaniCount === 0;
+             if ((tiles.length + otaniCount) % 3 !== 0) return false; 
 
              const counts = {};
              tiles.forEach(type => {
@@ -701,9 +764,11 @@
 
              const sortedTypes = Object.keys(counts).sort((a, b) => a.localeCompare(b));
              const firstType = sortedTypes.find(type => counts[type] > 0);
-             if (!firstType) return true;
+             if (!firstType) return otaniCount === 0;
 
-             // 1. 刻子 (3枚)
+             let result = false;
+
+             // 1. 刻子 (3枚) - 通常牌のみで構成
              if (counts[firstType] >= 3) {
                  counts[firstType] -= 3;
                  const nextTiles = [];
@@ -712,15 +777,41 @@
                          nextTiles.push(type);
                      }
                  }
-                 if (canFormSets(nextTiles)) return true;
+                 result = canFormSets(nextTiles, otaniCount);
                  counts[firstType] += 3; // backtrack
+                 if (result) return true;
              }
 
-             // 2. 順子 (連番3枚 C1, C2, C3) - SPは順子を構成できないため、C1-C9のみ
+             // 2. 刻子 (3枚) - 大谷牌を使用して構成 (2枚+大谷1 or 1枚+大谷2)
+             if (otaniCount > 0 && counts[firstType] >= 2) {
+                 counts[firstType] -= 2;
+                 const nextTiles = [];
+                 for (const type in counts) {
+                     for (let i = 0; i < counts[type]; i++) {
+                         nextTiles.push(type);
+                     }
+                 }
+                 result = canFormSets(nextTiles, otaniCount - 1);
+                 counts[firstType] += 2; // backtrack
+                 if (result) return true;
+             }
+             if (otaniCount > 1 && counts[firstType] >= 1) {
+                 counts[firstType] -= 1;
+                 const nextTiles = [];
+                 for (const type in counts) {
+                     for (let i = 0; i < counts[type]; i++) {
+                         nextTiles.push(type);
+                     }
+                 }
+                 result = canFormSets(nextTiles, otaniCount - 2);
+                 counts[firstType] += 1; // backtrack
+                 if (result) return true;
+             }
+             // 3. 順子 (連番3枚 P1, P2, P3) - 大谷牌なし
              const num1 = parseInt(firstType.substring(1));
-             if (firstType.startsWith('C') && num1 >= 1 && num1 <= 7) {
-                 const type2 = `C${num1 + 1}`;
-                 const type3 = `C${num1 + 2}`;
+             if (firstType.startsWith('P') && num1 >= 1 && num1 <= 7) {
+                 const type2 = `P${num1 + 1}`;
+                 const type3 = `P${num1 + 2}`;
                  
                  if (counts[firstType] > 0 && counts[type2] > 0 && counts[type3] > 0) {
                       counts[firstType]--;
@@ -734,11 +825,97 @@
                           }
                       }
                       
-                      if (canFormSets(nextTiles)) return true;
-
+                      result = canFormSets(nextTiles, otaniCount);
+                      
                       counts[firstType]++; // backtrack
                       counts[type2]++;
                       counts[type3]++;
+                      
+                      if (result) return true;
+                 }
+
+                 // 4. 順子 (連番3枚 P1, P2, P3) - 大谷牌1枚使用 (例: P1, P2, OT)
+                 if (otaniCount >= 1) {
+                    // P1, P2, OT
+                    if (counts[firstType] > 0 && counts[type2] > 0) {
+                        counts[firstType]--;
+                        counts[type2]--;
+                        
+                        const nextTiles = [];
+                        for (const type in counts) {
+                             for (let i = 0; i < counts[type]; i++) {
+                                 nextTiles.push(type);
+                             }
+                        }
+                        
+                        result = canFormSets(nextTiles, otaniCount - 1);
+                        
+                        counts[firstType]++; // backtrack
+                        counts[type2]++;
+                        
+                        if (result) return true;
+                    }
+
+                    // P1, OT, P3
+                    if (counts[firstType] > 0 && counts[type3] > 0) {
+                        counts[firstType]--;
+                        counts[type3]--;
+                        
+                        const nextTiles = [];
+                        for (const type in counts) {
+                             for (let i = 0; i < counts[type]; i++) {
+                                 nextTiles.push(type);
+                             }
+                        }
+                        
+                        result = canFormSets(nextTiles, otaniCount - 1);
+                        
+                        counts[firstType]++; // backtrack
+                        counts[type3]++;
+                        
+                        if (result) return true;
+                    }
+                    
+                    // OT, P2, P3
+                    const prevType = `P${num1 - 1}`;
+                    if (num1 > 1 && counts[type2] > 0 && counts[type3] > 0) {
+                        counts[type2]--;
+                        counts[type3]--;
+                        
+                        const nextTiles = [];
+                        for (const type in counts) {
+                             for (let i = 0; i < counts[type]; i++) {
+                                 nextTiles.push(type);
+                             }
+                        }
+                        
+                        result = canFormSets(nextTiles, otaniCount - 1);
+                        
+                        counts[type2]++;
+                        counts[type3]++;
+                        
+                        if (result) return true;
+                    }
+                 }
+                 // 5. 順子 (連番3枚 P1, P2, P3) - 大谷牌2枚使用 (例: P1, OT, OT)
+                 if (otaniCount >= 2) {
+                    // P1, OT, OT
+                    if (counts[firstType] > 0) {
+                        counts[firstType]--;
+                        
+                        const nextTiles = [];
+                        for (const type in counts) {
+                             for (let i = 0; i < counts[type]; i++) {
+                                 nextTiles.push(type);
+                             }
+                        }
+                        
+                        result = canFormSets(nextTiles, otaniCount - 2);
+                        
+                        counts[firstType]++; // backtrack
+                        
+                        if (result) return true;
+                    }
                  }
              }
 
@@ -878,8 +1055,8 @@
             --tile-border: #333;
             --deck-bg: #556B2F; /* Olive Drab */
             --player-bg: #f4f4f9;
-            --primary-color: #e94e77; /* Pinkish Red */
-            --secondary-color: #4CAF50; /* Green */
+            --primary-color: #003366; /* Deep Blue (Baseball theme) */
+            --secondary-color: #CC3333; /* Red (Baseball theme) */
         }
 
         body {
@@ -909,7 +1086,7 @@
             margin-top: 0;
             font-weight: 700;
             letter-spacing: 2px;
-            border-bottom: 3px solid var(--primary-color);
+            border-bottom: 3px solid var(--secondary-color);
             padding-bottom: 10px;
         }
 
@@ -948,19 +1125,26 @@
             box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
         }
 
-        /* 牌の色付け */
-        .tile[data-type^="C1"] { color: #FFD700; background-color: #FFFACD; }
-        .tile[data-type^="C2"] { color: #4169E1; background-color: #F0F8FF; }
-        .tile[data-type^="C3"] { color: #3CB371; background-color: #F0FFF0; }
-        .tile[data-type^="C4"] { color: #FF4500; background-color: #FFF0F5; }
-        .tile[data-type^="C5"] { color: #800080; background-color: #E6E6FA; }
-        .tile[data-type^="C6"] { color: #A52A2A; background-color: #FAF0E6; }
-        .tile[data-type^="C7"] { color: #008080; background-color: #E0FFFF; }
-        .tile[data-type^="C8"] { color: #FF69B4; background-color: #FFE4E1; }
-        .tile[data-type^="C9"] { color: #2F4F4F; background-color: #F5F5F5; }
-        .tile[data-type^="SP"] { color: var(--primary-color); background-color: #FFFAFA; border-color: var(--primary-color); }
-        .tile[data-type^="SP"]::after { content: "★"; }
-
+        /* 牌の色付け (ポジションをテーマに) */
+        .tile[data-type^="P1"] { color: #009999; background-color: #E0FFFF; } /* 投手 */
+        .tile[data-type^="P2"] { color: #8B4513; background-color: #F5F5DC; } /* 捕手 */
+        .tile[data-type^="P3"] { color: #006400; background-color: #90EE90; } /* 一塁手 (グリーン) */
+        .tile[data-type^="P4"] { color: #DAA520; background-color: #FAFAD2; } /* 二塁手 */
+        .tile[data-type^="P5"] { color: #FF4500; background-color: #FFDAB9; } /* 三塁手 (赤系) */
+        .tile[data-type^="P6"] { color: #4169E1; background-color: #ADD8E6; } /* 遊撃手 (青系) */
+        .tile[data-type^="P7"] { color: #800080; background-color: #E6E6FA; } /* 左翼手 */
+        .tile[data-type^="P8"] { color: #2F4F4F; background-color: #D3D3D3; } /* 中堅手 (グレー) */
+        .tile[data-type^="P9"] { color: #B8860B; background-color: #F0E68C; } /* 右翼手 */
+        
+        /* 大谷牌 (オールマイティ) */
+        .tile[data-type^="OT"] { 
+            color: var(--primary-color); 
+            background-color: #FFD700; /* Gold */
+            border-color: var(--primary-color);
+            font-size: 24px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        
         /* 裏返しの牌（山札/相手手牌） */
         .tile.face-down {
             background-color: var(--deck-bg);
@@ -1039,16 +1223,16 @@
         }
 
         .btn-primary { background-color: var(--primary-color); color: white; }
-        .btn-primary:hover:not(:disabled) { background-color: #c93e64; transform: translateY(-1px); }
+        .btn-primary:hover:not(:disabled) { background-color: #002244; transform: translateY(-1px); }
         .btn-secondary { background-color: var(--secondary-color); color: white; }
-        .btn-secondary:hover:not(:disabled) { background-color: #3e8e41; transform: translateY(-1px); }
+        .btn-secondary:hover:not(:disabled) { background-color: #a32727; transform: translateY(-1px); }
         
         .btn:disabled { background-color: #ccc; cursor: not-allowed; box-shadow: none; }
         
         /* 選択中の牌 */
         .tile.selected {
-            border: 4px solid var(--primary-color);
-            box-shadow: 0 0 10px var(--primary-color);
+            border: 4px solid var(--secondary-color);
+            box-shadow: 0 0 10px var(--secondary-color);
             transform: translateY(-5px);
         }
 
@@ -1188,18 +1372,18 @@
 <body>
 
 <div class="container">
-    <h1>Firebaseリアルタイム ドンジャラ (2人対戦＆チャット)</h1>
+    <h1>Firebaseリアルタイム 野球ドンジャラ (2人対戦＆チャット)</h1>
     <p id="loading-message" style="text-align: center; font-weight: bold;">認証中...</p>
     
     <!-- ロビー画面 -->
     <div id="lobby-container">
         <div id="connection-status">同期待機中...</div>
         <div class="input-group">
-            <h2 style="color: #4CAF50;">ルームを作成</h2>
+            <h2 style="color: var(--secondary-color);">ルームを作成</h2>
             <button id="create-room-button" class="btn btn-secondary">新規ルーム作成</button>
         </div>
         <div class="input-group">
-            <h2 style="color: #e94e77;">ルームに参加</h2>
+            <h2 style="color: var(--primary-color);">ルームに参加</h2>
             <input type="text" id="room-id-input" placeholder="ルームIDを入力" maxlength="8">
             <button id="join-room-button" class="btn btn-primary">参加</button>
         </div>
@@ -1227,7 +1411,7 @@
             <div class="board-area">
                 <!-- 山札エリア -->
                 <div class="deck-area">
-                    <p style="font-weight: 700;">山札 (<span id="deck-count">40</span>)</p>
+                    <p style="font-weight: 700;">山札 (<span id="deck-count">48</span>)</p>
                     <div class="tile face-down"></div>
                 </div>
 
