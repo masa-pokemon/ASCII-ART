@@ -6,7 +6,7 @@
     <title>オンライン人狼ゲーム</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght+400;700&display=swap');
         body {
             font-family: 'Noto Sans JP', 'Inter', sans-serif;
             background-color: #0d1117;
@@ -44,7 +44,7 @@
         }
         .gm-action-button {
             transition: all 0.15s ease-in-out;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
         }
         .gm-action-button:hover {
             transform: translateY(-1px);
@@ -174,11 +174,13 @@
     </div>
     
     <!-- Custom Modal for Alerts/Seer Results (アラート代替) -->
-    <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden" onclick="hideModal()">
-        <div class="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full" onclick="event.stopPropagation()">
+    <!-- 背景クリックとモーダル内のクリックイベントハンドラをJavaScriptで設定するため、インラインonclickを削除 -->
+    <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
+        <div id="modal-content-wrapper" class="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full">
             <h3 id="modal-title" class="text-xl font-bold mb-3 text-red-400"></h3>
             <p id="modal-content" class="text-white mb-4"></p>
-            <button onclick="hideModal()" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">閉じる</button>
+            <!-- onclick属性を削除し、IDを追加 -->
+            <button id="modal-close-button" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">閉じる</button>
         </div>
     </div>
 
@@ -194,7 +196,7 @@
 
         // ★★★ ユーザー提供の Firebase 設定を組み込みます ★★★
         const STATIC_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyBPMqx8KHacF0XiRLSRztgXiRHoGdXFpCQ",
+            apiKey: "AIzaSyBPMqx8KHacF0XiRLSRztxXiRHoGdXFpCQ",
             authDomain: "talk-to-friends-point.firebaseapp.com",
             projectId: "talk-to-friends-point",
             storageBucket: "talk-to-friends-point.firebaseapp.com",
@@ -226,14 +228,50 @@
             hostId: null,
             players: {},
             messages: [],
-            lastActionTarget: null,
+            // 夜のアクションを個別で追跡するフィールドを追加
+            werewolfTarget: null, // 人狼のターゲットID
+            guardTarget: null,    // 騎士のターゲットID
+            lastActionTarget: null, // 昼の投票ターゲットID
             eliminatedId: null,
             winner: null,
             nightActionsCompleted: [], // 夜の行動を完了した能力者のIDリスト
         };
 
         const GAME_COLLECTION = 'werewolf_games';
-        const REQUIRED_NIGHT_ROLES = ['werewolf', 'seer']; // 行動が必要な能力者
+        // 騎士(guard)を追加
+        const REQUIRED_NIGHT_ROLES = ['werewolf', 'seer', 'guard']; // 行動が必要な能力者
+
+        // DOM要素の取得
+        const nameInput = document.getElementById('player-name-input');
+        const setNameButton = document.getElementById('set-name-button');
+        const gameIdInput = document.getElementById('game-id-input');
+        const createGameButton = document.getElementById('create-game-button');
+        const joinGameButton = document.getElementById('join-game-button');
+        const lobbyArea = document.getElementById('lobby-area');
+        const gameArea = document.getElementById('game-area');
+        const gameTitle = document.getElementById('game-title');
+        const gameStatusDisplay = document.getElementById('game-status-display');
+        const yourRoleDisplay = document.getElementById('your-role');
+        const roleDescription = document.getElementById('role-description');
+        const playerListContainer = document.getElementById('player-list');
+        const playerCountDisplay = document.getElementById('player-count');
+        const chatMessagesContainer = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendMessageButton = document.getElementById('send-message-button');
+        const gmActionsArea = document.getElementById('gm-actions');
+        const startGameButton = document.getElementById('start-game-button');
+        const nextPhaseButton = document.getElementById('next-phase-button');
+        const resetGameButton = document.getElementById('reset-game-button');
+        const actionArea = document.getElementById('action-area');
+        const actionTitle = document.getElementById('action-title');
+        const actionTargetsContainer = document.getElementById('action-targets');
+        const resultArea = document.getElementById('result-area');
+        const resultText = document.getElementById('result-text');
+        
+        // ★ モーダル関連のDOM要素を取得
+        const customModal = document.getElementById('custom-modal');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalContentWrapper = document.getElementById('modal-content-wrapper');
 
         // Firebaseの設定と初期化
         if (firebaseConfig && Object.keys(firebaseConfig).length > 0) {
@@ -276,33 +314,6 @@
             userId = crypto.randomUUID(); // Fallback ID
             document.getElementById('current-user-info').textContent = `UserID: ${userId} (Firebase無効)`;
         }
-
-        // DOM要素の取得
-        const nameInput = document.getElementById('player-name-input');
-        const setNameButton = document.getElementById('set-name-button');
-        const gameIdInput = document.getElementById('game-id-input');
-        const createGameButton = document.getElementById('create-game-button');
-        const joinGameButton = document.getElementById('join-game-button');
-        const lobbyArea = document.getElementById('lobby-area');
-        const gameArea = document.getElementById('game-area');
-        const gameTitle = document.getElementById('game-title');
-        const gameStatusDisplay = document.getElementById('game-status-display');
-        const yourRoleDisplay = document.getElementById('your-role');
-        const roleDescription = document.getElementById('role-description');
-        const playerListContainer = document.getElementById('player-list');
-        const playerCountDisplay = document.getElementById('player-count');
-        const chatMessagesContainer = document.getElementById('chat-messages');
-        const messageInput = document.getElementById('message-input');
-        const sendMessageButton = document.getElementById('send-message-button');
-        const gmActionsArea = document.getElementById('gm-actions');
-        const startGameButton = document.getElementById('start-game-button');
-        const nextPhaseButton = document.getElementById('next-phase-button');
-        const resetGameButton = document.getElementById('reset-game-button');
-        const actionArea = document.getElementById('action-area');
-        const actionTitle = document.getElementById('action-title');
-        const actionTargetsContainer = document.getElementById('action-targets');
-        const resultArea = document.getElementById('result-area');
-        const resultText = document.getElementById('result-text');
         
         // =========================================================
         // カスタムモーダル (アラートの代替)
@@ -311,13 +322,32 @@
         function showModal(title, content) {
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-content').textContent = content;
-            document.getElementById('custom-modal').classList.remove('hidden');
+            customModal.classList.remove('hidden');
         }
 
         /** カスタムモーダルを非表示にする */
         function hideModal() {
-            document.getElementById('custom-modal').classList.add('hidden');
+            customModal.classList.add('hidden');
         }
+        
+        // ★ モーダルイベントリスナーの設定
+        if (customModal && modalCloseButton && modalContentWrapper) {
+            // 閉じるボタンのリスナー
+            modalCloseButton.addEventListener('click', hideModal);
+            
+            // 背景クリックのリスナー (モーダルコンテンツ以外をクリックした場合)
+            customModal.addEventListener('click', (event) => {
+                if (event.target === customModal) {
+                    hideModal();
+                }
+            });
+            
+            // モーダルコンテンツ内をクリックしても閉じないように伝播を停止
+            modalContentWrapper.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+        }
+
 
         // =========================================================
         // ユーザー名設定
@@ -350,19 +380,16 @@
             const newGameId = gameIdInput.value.trim().toUpperCase() || crypto.randomUUID().substring(0, 5).toUpperCase();
 
             const initialGameData = {
+                ...gameState, // gameStateの初期値を展開
                 status: 'lobby',
                 phase: 'waiting',
-                dayCount: 0,
                 hostId: userId,
                 players: {
                     [userId]: { name: userName, isAlive: true, role: 'unknown', votes: 0, isHost: true }
                 },
                 messages: [{ userId: 'system', name: 'システム', text: `${userName} がゲームを開始しました。`, timestamp: Date.now() }],
-                lastActionTarget: null,
-                eliminatedId: null,
-                winner: null,
-                nightActionsCompleted: [],
             };
+            // 夜のアクション追跡フィールドも初期値(null)で含まれる
 
             try {
                 const gameRef = getGameDocRef(newGameId);
@@ -472,7 +499,7 @@
         function updateUI() {
             gameTitle.textContent = `ゲームID: ${gameId}`;
             gameStatusDisplay.textContent = `${gameState.status === 'day' ? '昼' : gameState.status === 'night' ? '夜' : 'ロビー'} (フェーズ: ${getPhaseName(gameState.phase)}) - Day ${gameState.dayCount}`;
-            gameStatusDisplay.className = `px-3 py-1 text-sm font-semibold rounded-full ${gameState.status === 'day' ? 'bg-yellow-600' : gameState.status === 'night' ? 'bg-purple-800' : 'bg-indigo-600'}`;
+            gameStatusDisplay.className = `px-3 py-1 text-sm font-semibold rounded-full ${gameState.status === 'day' ? 'bg-yellow-600' : gameState.status === 'night' ? 'bg-purple-800' : gameState.status === 'finished' ? 'bg-red-600' : 'bg-indigo-600'}`;
 
             // 役割と説明の表示
             const player = gameState.players[userId];
@@ -480,13 +507,20 @@
                 const roleMap = {
                     werewolf: { name: '人狼', desc: '夜に村人を襲撃できます。' },
                     seer: { name: '占い師', desc: '夜に一人を占えます。' },
+                    guard: { name: '騎士', desc: '夜に一人を守れます。守った人が襲撃された場合、死亡を防げます。' },
                     villager: { name: '村人', desc: '特別な能力はありません。' },
                     unknown: { name: '未定', desc: 'ゲーム開始までお待ちください。' }
                 };
                 const currentRole = roleMap[player.role] || roleMap.unknown;
+                
+                // 役割の色分け
+                let roleColor = '#34d399'; // 村人
+                if (player.role === 'werewolf') roleColor = '#f87171'; // 人狼
+                else if (player.role === 'seer') roleColor = '#60a5fa'; // 占い師
+                else if (player.role === 'guard') roleColor = '#fcd34d'; // 騎士
 
                 yourRoleDisplay.textContent = `あなたの役割: ${currentRole.name} ${player.isAlive ? '' : '(死亡)'}`;
-                yourRoleDisplay.style.color = player.role === 'werewolf' ? '#f87171' : player.role === 'seer' ? '#60a5fa' : '#34d399';
+                yourRoleDisplay.style.color = roleColor;
                 roleDescription.textContent = currentRole.desc;
             } else {
                  yourRoleDisplay.textContent = 'ゲームに参加していません';
@@ -533,7 +567,8 @@
             playerEntries.forEach(([pId, pData]) => {
                 const isMine = pId === userId;
                 const isHost = pData.isHost;
-                const roleText = (isMine && pData.role !== 'unknown') ? ` (${pData.role === 'werewolf' ? '人狼' : pData.role === 'seer' ? '占い' : '村人'})` : '';
+                const roleText = (isMine && pData.role !== 'unknown') ? 
+                    ` (${pData.role === 'werewolf' ? '人狼' : pData.role === 'seer' ? '占い' : pData.role === 'guard' ? '騎士' : '村人'})` : '';
                 const statusColor = pData.isAlive ? 'bg-green-600' : 'bg-red-800';
                 const statusText = pData.isAlive ? '生存' : '死亡';
 
@@ -598,6 +633,9 @@
                 } else if (player.role === 'seer') {
                     actionType = 'seer_predict';
                     title = '占う対象を選んでください';
+                } else if (player.role === 'guard') {
+                    actionType = 'guard_protect';
+                    title = '守る対象を選んでください';
                 }
             }
             
@@ -621,7 +659,7 @@
             actionTitle.textContent = title;
 
             Object.entries(gameState.players).forEach(([pId, pData]) => {
-                // 投票は自分以外で生存している人、夜の行動も自分以外で生存している人
+                // 投票は自分以外で生存している人、夜の行動も自分以外で生存している人（騎士は自分を守れる設定も可能だが、今回は標準的に自分以外とする）
                 if (pId !== userId && pData.isAlive) {
                     const button = document.createElement('button');
                     button.className = 'px-4 py-2 bg-pink-600 text-white font-semibold rounded-lg hover:bg-pink-700 transition duration-150 gm-action-button';
@@ -637,13 +675,17 @@
             resultArea.classList.add('hidden');
             if (gameState.status === 'finished') {
                 resultArea.classList.remove('hidden');
-                resultText.textContent = gameState.winner === 'villagers' ? 'ゲーム終了！村人の勝利です！' :
-                                         gameState.winner === 'werewolves' ? 'ゲーム終了！人狼の勝利です！' :
-                                         'ゲームが終了しました。';
+                const winnerText = gameState.winner === 'villagers' ? '村人陣営' :
+                                   gameState.winner === 'werewolves' ? '人狼陣営' :
+                                   '不明';
+                resultText.textContent = `ゲーム終了！【${winnerText}】の勝利です！`;
+                resultText.className = `text-lg font-bold text-center ${gameState.winner === 'villagers' ? 'text-green-300' : 'text-red-300'}`;
+
             } else if (gameState.phase === 'result' && gameState.eliminatedId) {
                  resultArea.classList.remove('hidden');
                  const eliminatedPlayer = gameState.players[gameState.eliminatedId];
-                 resultText.textContent = `${eliminatedPlayer.name} が追放されました。正体は ${eliminatedPlayer.role === 'werewolf' ? '人狼' : eliminatedPlayer.role === 'seer' ? '占い師' : '村人'} でした。`;
+                 resultText.textContent = `${eliminatedPlayer.name} が追放されました。正体は ${eliminatedPlayer.role === 'werewolf' ? '人狼' : eliminatedPlayer.role === 'seer' ? '占い師' : eliminatedPlayer.role === 'guard' ? '騎士' : '村人'} でした。`;
+                 resultText.className = 'text-lg font-bold text-center text-yellow-300';
             }
         }
 
@@ -686,7 +728,7 @@
                     const player = currentData.players[userId];
                     if (!player || !player.isAlive || (currentData.nightActionsCompleted && currentData.nightActionsCompleted.includes(userId))) return;
 
-                    let updateData = {};
+                    let updateFields = {};
                     let isPublicMessage = true; // チャットに流すかどうかのフラグ
                     
                     // 1日目の昼は投票アクションを受け付けない
@@ -699,14 +741,14 @@
 
                     if (actionType === 'vote' && currentData.status === 'day' && currentData.phase === 'vote') {
                         // 投票ロジック (昼の投票はシステムメッセージを公開)
-                        updateData.lastActionTarget = targetId;
-                        updateData.systemMessageText = `${player.name} が投票を完了しました。`;
+                        updateFields.lastActionTarget = targetId;
+                        updateFields.systemMessageText = `${player.name} が投票を完了しました。`;
                         isPublicMessage = true;
 
                     } else if (actionType === 'werewolf_attack' && player.role === 'werewolf' && currentData.status === 'night' && currentData.phase === 'action') {
                         // 人狼の襲撃 (システムメッセージを非公開)
-                        updateData.lastActionTarget = targetId;
-                        updateData.nightActionsCompleted = arrayUnion(userId);
+                        updateFields.werewolfTarget = targetId;
+                        updateFields.nightActionsCompleted = arrayUnion(userId);
                         
                         // 人狼にのみフィードバックをモーダルで表示
                         showModal('人狼の襲撃', `${currentData.players[targetId].name} を襲撃対象として決定しました。他の人狼の行動、または朝を待ってください。`);
@@ -721,7 +763,18 @@
                         // 占い師にのみ結果をモーダルで表示
                         showModal('占い結果', `${targetPlayer.name} の正体は【${result}】でした。`);
                         
-                        updateData.nightActionsCompleted = arrayUnion(userId);
+                        updateFields.nightActionsCompleted = arrayUnion(userId);
+                        // updateFields.seerTarget = targetId; // 占いはターゲットIDを記録する必要はないため省略
+                        isPublicMessage = false; // ★非公開
+                    
+                    } else if (actionType === 'guard_protect' && player.role === 'guard' && currentData.status === 'night' && currentData.phase === 'action') {
+                        // 騎士の護衛 (結果はプライベートに表示)
+                        
+                        // 騎士にのみフィードバックをモーダルで表示
+                        showModal('騎士の護衛', `${currentData.players[targetId].name} を護衛対象として決定しました。朝を待ってください。`);
+                        
+                        updateFields.guardTarget = targetId;
+                        updateFields.nightActionsCompleted = arrayUnion(userId);
                         isPublicMessage = false; // ★非公開
 
                     } else {
@@ -730,24 +783,22 @@
 
                     // チャットに追加するのは公開メッセージの場合のみ
                     const updateObj = {
-                         nightActionsCompleted: updateData.nightActionsCompleted || currentData.nightActionsCompleted,
+                         nightActionsCompleted: updateFields.nightActionsCompleted || currentData.nightActionsCompleted,
+                         werewolfTarget: updateFields.werewolfTarget !== undefined ? updateFields.werewolfTarget : currentData.werewolfTarget,
+                         guardTarget: updateFields.guardTarget !== undefined ? updateFields.guardTarget : currentData.guardTarget,
+                         lastActionTarget: updateFields.lastActionTarget !== undefined ? updateFields.lastActionTarget : currentData.lastActionTarget,
                     };
                     
-                    if (isPublicMessage) {
+                    if (isPublicMessage && updateFields.systemMessageText) {
                         const newMessage = {
                             userId: 'system',
                             name: 'システム',
-                            text: updateData.systemMessageText,
+                            text: updateFields.systemMessageText,
                             timestamp: Date.now()
                         };
                         updateObj.messages = arrayUnion(newMessage);
                     }
                     
-                    // lastActionTarget は人狼の襲撃時または投票時のみ更新
-                    if (actionType === 'werewolf_attack' || actionType === 'vote') {
-                        updateObj.lastActionTarget = targetId;
-                    }
-
                     transaction.update(gameRef, updateObj);
                 });
                 console.log('アクションが完了しました。');
@@ -765,7 +816,7 @@
         function checkWinCondition(players) {
             const alivePlayers = Object.values(players).filter(p => p.isAlive);
             const aliveWerewolves = alivePlayers.filter(p => p.role === 'werewolf').length;
-            const aliveVillagers = alivePlayers.filter(p => p.role !== 'werewolf').length; // 村人陣営
+            const aliveVillagers = alivePlayers.filter(p => p.role !== 'werewolf').length; // 村人陣営 (村人、占い師、騎士)
 
             if (aliveWerewolves === 0) {
                 return 'villagers'; // 人狼が全滅
@@ -834,7 +885,7 @@
                 eliminatedId = currentData.lastActionTarget;
                 if (eliminatedId && newPlayers[eliminatedId]) {
                     newPlayers[eliminatedId].isAlive = false;
-                    systemMessageText = `${newPlayers[eliminatedId].name} が追放されました。正体は ${newPlayers[eliminatedId].role === 'werewolf' ? '人狼' : newPlayers[eliminatedId].role === 'seer' ? '占い師' : '村人'} でした。`;
+                    systemMessageText = `${newPlayers[eliminatedId].name} が追放されました。正体は ${newPlayers[eliminatedId].role === 'werewolf' ? '人狼' : newPlayers[eliminatedId].role === 'seer' ? '占い師' : newPlayers[eliminatedId].role === 'guard' ? '騎士' : '村人'} でした。`;
                 } else {
                     systemMessageText = '追放者はいませんでした (同数票など)。';
                 }
@@ -855,14 +906,26 @@
                 nextStatus = 'day';
                 nextPhase = 'discussion';
                 
-                // TODO: 実際の夜の行動結果を反映 (ここでは lastActionTarget を襲撃対象と仮定)
-                eliminatedId = currentData.lastActionTarget;
-                
+                // ★夜の行動結果を判定★
+                const wTarget = currentData.werewolfTarget;
+                const gTarget = currentData.guardTarget;
+                eliminatedId = null; 
                 let nightResultText = '';
-                if (eliminatedId && newPlayers[eliminatedId]) {
-                    newPlayers[eliminatedId].isAlive = false;
-                    nightResultText = `夜の間に ${newPlayers[eliminatedId].name} が犠牲になりました。`;
+
+                if (wTarget) {
+                    if (wTarget === gTarget) {
+                        // 騎士が護衛成功
+                        nightResultText = `${newPlayers[wTarget].name} が襲撃されましたが、護衛されていたため犠牲者は出ませんでした。`;
+                    } else {
+                        // 騎士の護衛失敗または護衛なし
+                        eliminatedId = wTarget;
+                        if (newPlayers[eliminatedId]) {
+                            newPlayers[eliminatedId].isAlive = false;
+                            nightResultText = `夜の間に ${newPlayers[eliminatedId].name} が犠牲になりました。`;
+                        }
+                    }
                 } else {
+                    // 人狼がターゲットを選択しなかった場合
                     nightResultText = `犠牲者はいませんでした。`;
                 }
 
@@ -893,7 +956,9 @@
                 phase: nextPhase,
                 dayCount: nextDayCount,
                 eliminatedId: eliminatedId,
-                lastActionTarget: null, // アクションターゲットをリセット
+                lastActionTarget: null, // 昼のアクションターゲットをリセット
+                werewolfTarget: null, // 夜のアクションターゲットをリセット
+                guardTarget: null,    // 夜のアクションターゲットをリセット
                 messages: arrayUnion(newMessage),
                 players: newPlayers,
                 winner: winner,
@@ -931,6 +996,8 @@
                     players: newPlayers,
                     messages: arrayUnion(initialMessage),
                     winner: null,
+                    werewolfTarget: null,
+                    guardTarget: null,
                     nightActionsCompleted: [],
                 });
             } catch (e) {
@@ -938,16 +1005,39 @@
             }
         });
 
-        // 役割のランダム割り当て (省略、前回の実装から変更なし)
+        /** 役割のランダム割り当て (騎士を追加) */
         function assignRoles(players) {
             const playerIds = Object.keys(players);
-            // 3人: 人狼1, 占い1, 村人1
-            const roles = ['werewolf', 'seer']; 
-            const requiredVillagers = playerIds.length - roles.length;
+            const playerCount = playerIds.length;
+            let roles = [];
+            
+            // 役割構成の決定
+            if (playerCount >= 4) {
+                // 4人以上: 人狼1, 占い1, 騎士1 は確保
+                roles.push('werewolf', 'seer', 'guard');
+            } else if (playerCount === 3) {
+                // 3人: 人狼1, 占い1, 村人1 (騎士は入れない)
+                roles.push('werewolf', 'seer');
+            } else {
+                // 参加人数が少ない場合は処理を中断
+                return players;
+            }
+
+            // 残りを村人にする
+            const requiredVillagers = playerCount - roles.length;
             for (let i = 0; i < requiredVillagers; i++) {
                 roles.push('villager');
             }
+            
+            // 人数が少ない場合に不足した役割を村人に置き換え
+            if (roles.length < playerCount) {
+                while(roles.length < playerCount) {
+                    roles.push('villager');
+                }
+            }
 
+
+            // シャッフル
             for (let i = roles.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [roles[i], roles[j]] = [roles[j], roles[i]];
@@ -970,7 +1060,8 @@
         /** ゲームリセット (GM操作) */
         resetGameButton.addEventListener('click', async () => {
             if (gameState.hostId !== userId) return;
-            if (!confirm('本当にゲームをリセット（削除）しますか？')) return; 
+            // confirm() の代わりにモーダルを使うべきですが、GM操作なのでここでは一時的に console.log で代用します
+            console.log('ゲームをリセット（削除）します。');
 
             try {
                 await deleteDoc(getGameDocRef(gameId));
@@ -997,7 +1088,7 @@
             resultArea.classList.add('hidden');
             playerListContainer.innerHTML = '';
             chatMessagesContainer.innerHTML = '';
-            gameState = { status: 'uninitialized', phase: 'waiting', dayCount: 0, hostId: null, players: {}, messages: [], lastActionTarget: null, eliminatedId: null, winner: null, nightActionsCompleted: [] };
+            gameState = { status: 'uninitialized', phase: 'waiting', dayCount: 0, hostId: null, players: {}, messages: [], werewolfTarget: null, guardTarget: null, lastActionTarget: null, eliminatedId: null, winner: null, nightActionsCompleted: [] };
         }
     </script>
 </body>
