@@ -6,7 +6,7 @@
     <title>オンライン人狼ゲーム</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght+400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap');
         body {
             font-family: 'Noto Sans JP', 'Inter', sans-serif;
             background-color: #0d1117;
@@ -164,9 +164,9 @@
                         </div>
                     </div>
 
-                    <!-- 結果エリア -->
+                    <!-- 結果エリア (innerHTMLで全体を更新) -->
                     <div id="result-area" class="card p-4 bg-yellow-900/30 border-yellow-700 hidden">
-                        <p id="result-text" class="text-lg font-bold text-center text-yellow-300"></p>
+                        <!-- 結果コンテンツがここに挿入されます -->
                     </div>
                 </div>
             </div>
@@ -174,12 +174,10 @@
     </div>
     
     <!-- Custom Modal for Alerts/Seer Results (アラート代替) -->
-    <!-- 背景クリックとモーダル内のクリックイベントハンドラをJavaScriptで設定するため、インラインonclickを削除 -->
     <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
         <div id="modal-content-wrapper" class="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full">
             <h3 id="modal-title" class="text-xl font-bold mb-3 text-red-400"></h3>
             <p id="modal-content" class="text-white mb-4"></p>
-            <!-- onclick属性を削除し、IDを追加 -->
             <button id="modal-close-button" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">閉じる</button>
         </div>
     </div>
@@ -266,7 +264,6 @@
         const actionTitle = document.getElementById('action-title');
         const actionTargetsContainer = document.getElementById('action-targets');
         const resultArea = document.getElementById('result-area');
-        const resultText = document.getElementById('result-text');
         
         // ★ モーダル関連のDOM要素を取得
         const customModal = document.getElementById('custom-modal');
@@ -673,19 +670,51 @@
         /** 結果エリアの処理 */
         function handleResultArea() {
             resultArea.classList.add('hidden');
+            resultArea.innerHTML = ''; // コンテンツをクリア
+
             if (gameState.status === 'finished') {
                 resultArea.classList.remove('hidden');
-                const winnerText = gameState.winner === 'villagers' ? '村人陣営' :
-                                   gameState.winner === 'werewolves' ? '人狼陣営' :
-                                   '不明';
-                resultText.textContent = `ゲーム終了！【${winnerText}】の勝利です！`;
-                resultText.className = `text-lg font-bold text-center ${gameState.winner === 'villagers' ? 'text-green-300' : 'text-red-300'}`;
+                
+                const winnerIsVillagers = gameState.winner === 'villagers';
+                const winnerText = winnerIsVillagers ? '村人陣営' : '人狼陣営';
+                
+                // 勝利チームのプレイヤーを抽出
+                const winningRoles = winnerIsVillagers ? ['villager', 'seer', 'guard'] : ['werewolf'];
+                
+                const winningPlayers = Object.values(gameState.players)
+                    .filter(p => winningRoles.includes(p.role))
+                    .map(p => {
+                        // 役割名を取得
+                        const roleName = p.role === 'werewolf' ? '人狼' : p.role === 'seer' ? '占い師' : p.role === 'guard' ? '騎士' : '村人';
+                        const status = p.isAlive ? ' (生存)' : ' (死亡)';
+                        return `${p.name} (${roleName}${status})`;
+                    })
+                    .join('、 ');
+                
+                const resultHtml = `
+                    <p class="text-xl font-extrabold text-center ${winnerIsVillagers ? 'text-green-300' : 'text-red-300'} mb-2">
+                        ゲーム終了！【${winnerText}】の勝利です！
+                    </p>
+                    <p class="text-base text-center text-gray-200">
+                        <span class="font-bold">勝利プレイヤー:</span>
+                        <br class="sm:hidden">
+                        ${winningPlayers}
+                    </p>
+                `;
+                
+                resultArea.innerHTML = resultHtml; 
 
             } else if (gameState.phase === 'result' && gameState.eliminatedId) {
                  resultArea.classList.remove('hidden');
                  const eliminatedPlayer = gameState.players[gameState.eliminatedId];
-                 resultText.textContent = `${eliminatedPlayer.name} が追放されました。正体は ${eliminatedPlayer.role === 'werewolf' ? '人狼' : eliminatedPlayer.role === 'seer' ? '占い師' : eliminatedPlayer.role === 'guard' ? '騎士' : '村人'} でした。`;
-                 resultText.className = 'text-lg font-bold text-center text-yellow-300';
+                 const roleName = eliminatedPlayer.role === 'werewolf' ? '人狼' : eliminatedPlayer.role === 'seer' ? '占い師' : eliminatedPlayer.role === 'guard' ? '騎士' : '村人';
+                 
+                 const resultHtml = `
+                     <p class="text-lg font-bold text-center text-yellow-300">
+                         ${eliminatedPlayer.name} が追放されました。正体は【${roleName}】でした。
+                     </p>
+                 `;
+                 resultArea.innerHTML = resultHtml;
             }
         }
 
@@ -1017,19 +1046,20 @@
                 roles.push('werewolf', 'seer', 'guard');
             } else if (playerCount === 3) {
                 // 3人: 人狼1, 占い1, 村人1 (騎士は入れない)
-                roles.push('werewolf', 'seer');
+                roles.push('werewolf', 'seer', 'villager'); // 3人目も村人として追加
             } else {
                 // 参加人数が少ない場合は処理を中断
                 return players;
             }
 
             // 残りを村人にする
-            const requiredVillagers = playerCount - roles.length;
+            const initialRolesCount = roles.length;
+            const requiredVillagers = playerCount - initialRolesCount;
             for (let i = 0; i < requiredVillagers; i++) {
                 roles.push('villager');
             }
             
-            // 人数が少ない場合に不足した役割を村人に置き換え
+            // 役割数が不足していた場合の緊急処理（通常は上記ロジックで不要だが念のため）
             if (roles.length < playerCount) {
                 while(roles.length < playerCount) {
                     roles.push('villager');
