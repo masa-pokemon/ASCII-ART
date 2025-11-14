@@ -236,8 +236,7 @@
         };
 
         const GAME_COLLECTION = 'werewolf_games';
-        // 騎士(guard)を追加
-        const REQUIRED_NIGHT_ROLES = ['werewolf', 'seer', 'guard']; // 行動が必要な能力者
+        const REQUIRED_NIGHT_ROLES = ['werewolf', 'seer', 'guard']; // 行動が必要な能力者 (wolf_mate, bakerは特殊能力なし/夜行動なし)
 
         // DOM要素の取得
         const nameInput = document.getElementById('player-name-input');
@@ -265,10 +264,31 @@
         const actionTargetsContainer = document.getElementById('action-targets');
         const resultArea = document.getElementById('result-area');
         
-        // ★ モーダル関連のDOM要素を取得
+        // モーダル関連のDOM要素を取得
         const customModal = document.getElementById('custom-modal');
         const modalCloseButton = document.getElementById('modal-close-button');
         const modalContentWrapper = document.getElementById('modal-content-wrapper');
+
+
+        // --- 新しい役割マップとヘルパー関数 ---
+        function getRoleMap() {
+            return {
+                werewolf: { name: '人狼', desc: '夜に村人を襲撃できます。', team: 'werewolves' },
+                wolf_mate: { name: '人狼の相棒', desc: '人狼陣営です。自分が追放された際、生存者を道連れにします。', team: 'werewolves' }, // 新規追加
+                seer: { name: '占い師', desc: '夜に一人を占えます。', team: 'villagers' },
+                guard: { name: '騎士', desc: '夜に一人を守れます。守った人が襲撃された場合、死亡を防げます。', team: 'villagers' },
+                baker: { name: 'パン屋', desc: '村人陣営です。生存していると、パンの香りで平和なメッセージが流れます。', team: 'villagers' }, // 新規追加
+                villager: { name: '村人', desc: '特別な能力はありません。', team: 'villagers' },
+                unknown: { name: '未定', desc: 'ゲーム開始までお待ちください。', team: 'unknown' }
+            };
+        }
+
+        function getRoleDisplayName(roleKey) {
+            const roleMap = getRoleMap();
+            return roleMap[roleKey] ? roleMap[roleKey].name : '不明';
+        }
+        // --- ヘルパー関数終わり ---
+
 
         // Firebaseの設定と初期化
         if (firebaseConfig && Object.keys(firebaseConfig).length > 0) {
@@ -327,19 +347,14 @@
             customModal.classList.add('hidden');
         }
         
-        // ★ モーダルイベントリスナーの設定
+        // モーダルイベントリスナーの設定
         if (customModal && modalCloseButton && modalContentWrapper) {
-            // 閉じるボタンのリスナー
             modalCloseButton.addEventListener('click', hideModal);
-            
-            // 背景クリックのリスナー (モーダルコンテンツ以外をクリックした場合)
             customModal.addEventListener('click', (event) => {
                 if (event.target === customModal) {
                     hideModal();
                 }
             });
-            
-            // モーダルコンテンツ内をクリックしても閉じないように伝播を停止
             modalContentWrapper.addEventListener('click', (event) => {
                 event.stopPropagation();
             });
@@ -386,7 +401,6 @@
                 },
                 messages: [{ userId: 'system', name: 'システム', text: `${userName} がゲームを開始しました。`, timestamp: Date.now() }],
             };
-            // 夜のアクション追跡フィールドも初期値(null)で含まれる
 
             try {
                 const gameRef = getGameDocRef(newGameId);
@@ -501,20 +515,16 @@
             // 役割と説明の表示
             const player = gameState.players[userId];
             if (player) {
-                const roleMap = {
-                    werewolf: { name: '人狼', desc: '夜に村人を襲撃できます。' },
-                    seer: { name: '占い師', desc: '夜に一人を占えます。' },
-                    guard: { name: '騎士', desc: '夜に一人を守れます。守った人が襲撃された場合、死亡を防げます。' },
-                    villager: { name: '村人', desc: '特別な能力はありません。' },
-                    unknown: { name: '未定', desc: 'ゲーム開始までお待ちください。' }
-                };
+                const roleMap = getRoleMap();
                 const currentRole = roleMap[player.role] || roleMap.unknown;
                 
                 // 役割の色分け
                 let roleColor = '#34d399'; // 村人
-                if (player.role === 'werewolf') roleColor = '#f87171'; // 人狼
+                if (currentRole.team === 'werewolves') roleColor = '#f87171'; // 人狼陣営
                 else if (player.role === 'seer') roleColor = '#60a5fa'; // 占い師
                 else if (player.role === 'guard') roleColor = '#fcd34d'; // 騎士
+                else if (player.role === 'baker') roleColor = '#f7b731'; // パン屋
+                
 
                 yourRoleDisplay.textContent = `あなたの役割: ${currentRole.name} ${player.isAlive ? '' : '(死亡)'}`;
                 yourRoleDisplay.style.color = roleColor;
@@ -564,8 +574,9 @@
             playerEntries.forEach(([pId, pData]) => {
                 const isMine = pId === userId;
                 const isHost = pData.isHost;
+                const roleName = getRoleDisplayName(pData.role);
                 const roleText = (isMine && pData.role !== 'unknown') ? 
-                    ` (${pData.role === 'werewolf' ? '人狼' : pData.role === 'seer' ? '占い' : pData.role === 'guard' ? '騎士' : '村人'})` : '';
+                    ` (${roleName})` : '';
                 const statusColor = pData.isAlive ? 'bg-green-600' : 'bg-red-800';
                 const statusText = pData.isAlive ? '生存' : '死亡';
 
@@ -634,6 +645,7 @@
                     actionType = 'guard_protect';
                     title = '守る対象を選んでください';
                 }
+                // wolf_mate, baker, villager は夜の行動なし
             }
             
             if (isFirstDayVote) {
@@ -656,7 +668,7 @@
             actionTitle.textContent = title;
 
             Object.entries(gameState.players).forEach(([pId, pData]) => {
-                // 投票は自分以外で生存している人、夜の行動も自分以外で生存している人（騎士は自分を守れる設定も可能だが、今回は標準的に自分以外とする）
+                // 投票は自分以外で生存している人、夜の行動も自分以外で生存している人
                 if (pId !== userId && pData.isAlive) {
                     const button = document.createElement('button');
                     button.className = 'px-4 py-2 bg-pink-600 text-white font-semibold rounded-lg hover:bg-pink-700 transition duration-150 gm-action-button';
@@ -678,14 +690,14 @@
                 const winnerIsVillagers = gameState.winner === 'villagers';
                 const winnerText = winnerIsVillagers ? '村人陣営' : '人狼陣営';
                 
+                const roleMap = getRoleMap();
+
                 // 勝利チームのプレイヤーを抽出
-                const winningRoles = winnerIsVillagers ? ['villager', 'seer', 'guard'] : ['werewolf'];
-                
                 const winningPlayers = Object.values(gameState.players)
-                    .filter(p => winningRoles.includes(p.role))
+                    .filter(p => roleMap[p.role]?.team === gameState.winner)
                     .map(p => {
                         // 役割名を取得
-                        const roleName = p.role === 'werewolf' ? '人狼' : p.role === 'seer' ? '占い師' : p.role === 'guard' ? '騎士' : '村人';
+                        const roleName = getRoleDisplayName(p.role);
                         const status = p.isAlive ? ' (生存)' : ' (死亡)';
                         return `${p.name} (${roleName}${status})`;
                     })
@@ -707,7 +719,7 @@
             } else if (gameState.phase === 'result' && gameState.eliminatedId) {
                  resultArea.classList.remove('hidden');
                  const eliminatedPlayer = gameState.players[gameState.eliminatedId];
-                 const roleName = eliminatedPlayer.role === 'werewolf' ? '人狼' : eliminatedPlayer.role === 'seer' ? '占い師' : eliminatedPlayer.role === 'guard' ? '騎士' : '村人';
+                 const roleName = getRoleDisplayName(eliminatedPlayer.role);
                  
                  const resultHtml = `
                      <p class="text-lg font-bold text-center text-yellow-300">
@@ -758,7 +770,7 @@
                     if (!player || !player.isAlive || (currentData.nightActionsCompleted && currentData.nightActionsCompleted.includes(userId))) return;
 
                     let updateFields = {};
-                    let isPublicMessage = true; // チャットに流すかどうかのフラグ
+                    let isPublicMessage = true; 
                     
                     // 1日目の昼は投票アクションを受け付けない
                     const isFirstDayVoteAttempt = (currentData.dayCount === 1 && currentData.status === 'day' && actionType === 'vote');
@@ -769,42 +781,36 @@
 
 
                     if (actionType === 'vote' && currentData.status === 'day' && currentData.phase === 'vote') {
-                        // 投票ロジック (昼の投票はシステムメッセージを公開)
+                        // 投票ロジック
                         updateFields.lastActionTarget = targetId;
                         updateFields.systemMessageText = `${player.name} が投票を完了しました。`;
                         isPublicMessage = true;
 
                     } else if (actionType === 'werewolf_attack' && player.role === 'werewolf' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 人狼の襲撃 (システムメッセージを非公開)
+                        // 人狼の襲撃
                         updateFields.werewolfTarget = targetId;
                         updateFields.nightActionsCompleted = arrayUnion(userId);
-                        
-                        // 人狼にのみフィードバックをモーダルで表示
                         showModal('人狼の襲撃', `${currentData.players[targetId].name} を襲撃対象として決定しました。他の人狼の行動、または朝を待ってください。`);
-                        
-                        isPublicMessage = false; // ★非公開
+                        isPublicMessage = false; 
                         
                     } else if (actionType === 'seer_predict' && player.role === 'seer' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 占い師の占い (結果はプライベートに表示)
+                        // 占い師の占い
                         const targetPlayer = currentData.players[targetId];
-                        const result = targetPlayer.role === 'werewolf' ? '人狼' : '人狼ではない';
+                        const isWerewolfTeam = targetPlayer.role === 'werewolf' || targetPlayer.role === 'wolf_mate'; // 人狼の相棒も人狼陣営として占われる
+                        const result = isWerewolfTeam ? '人狼' : '人狼ではない';
                         
-                        // 占い師にのみ結果をモーダルで表示
                         showModal('占い結果', `${targetPlayer.name} の正体は【${result}】でした。`);
                         
                         updateFields.nightActionsCompleted = arrayUnion(userId);
-                        // updateFields.seerTarget = targetId; // 占いはターゲットIDを記録する必要はないため省略
-                        isPublicMessage = false; // ★非公開
+                        isPublicMessage = false; 
                     
                     } else if (actionType === 'guard_protect' && player.role === 'guard' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 騎士の護衛 (結果はプライベートに表示)
-                        
-                        // 騎士にのみフィードバックをモーダルで表示
+                        // 騎士の護衛
                         showModal('騎士の護衛', `${currentData.players[targetId].name} を護衛対象として決定しました。朝を待ってください。`);
                         
                         updateFields.guardTarget = targetId;
                         updateFields.nightActionsCompleted = arrayUnion(userId);
-                        isPublicMessage = false; // ★非公開
+                        isPublicMessage = false; 
 
                     } else {
                         throw new Error('無効なアクションです。');
@@ -843,15 +849,20 @@
 
         /** 勝利判定 */
         function checkWinCondition(players) {
+            const roleMap = getRoleMap();
+            
             const alivePlayers = Object.values(players).filter(p => p.isAlive);
-            const aliveWerewolves = alivePlayers.filter(p => p.role === 'werewolf').length;
-            const aliveVillagers = alivePlayers.filter(p => p.role !== 'werewolf').length; // 村人陣営 (村人、占い師、騎士)
+            
+            // 人狼陣営 (werewolf, wolf_mate)
+            const aliveWerewolvesTeam = alivePlayers.filter(p => roleMap[p.role]?.team === 'werewolves').length;
+            // 村人陣営 (villager, seer, guard, baker)
+            const aliveVillagersTeam = alivePlayers.filter(p => roleMap[p.role]?.team === 'villagers').length;
 
-            if (aliveWerewolves === 0) {
-                return 'villagers'; // 人狼が全滅
+            if (aliveWerewolvesTeam === 0) {
+                return 'villagers'; // 人狼陣営が全滅
             }
-            if (aliveWerewolves >= aliveVillagers) {
-                return 'werewolves'; // 人狼の数が村人陣営の数以上
+            if (aliveWerewolvesTeam >= aliveVillagersTeam) {
+                return 'werewolves'; // 人狼陣営の数が村人陣営の数以上
             }
             return null; // 決着せず
         }
@@ -865,7 +876,7 @@
                 .filter(([, pData]) => pData.isAlive)
                 .map(([pId, pData]) => ({ id: pId, ...pData }));
 
-            // 行動が必要な能力者のIDリスト
+            // 行動が必要な能力者のIDリスト (werewolf, seer, guard)
             const requiredActionPlayerIds = alivePlayers
                 .filter(p => REQUIRED_NIGHT_ROLES.includes(p.role))
                 .map(p => p.id);
@@ -910,11 +921,35 @@
             } else if (currentData.status === 'day' && currentData.phase === 'vote') {
                 // 投票 -> 投票結果発表
                 nextPhase = 'result';
-                // TODO: 実際の投票集計ロジックを実装する (ここでは lastActionTarget を追放対象と仮定)
+                
                 eliminatedId = currentData.lastActionTarget;
+                
                 if (eliminatedId && newPlayers[eliminatedId]) {
-                    newPlayers[eliminatedId].isAlive = false;
-                    systemMessageText = `${newPlayers[eliminatedId].name} が追放されました。正体は ${newPlayers[eliminatedId].role === 'werewolf' ? '人狼' : newPlayers[eliminatedId].role === 'seer' ? '占い師' : newPlayers[eliminatedId].role === 'guard' ? '騎士' : '村人'} でした。`;
+                    const eliminatedPlayer = newPlayers[eliminatedId];
+                    const roleName = getRoleDisplayName(eliminatedPlayer.role);
+                    
+                    eliminatedPlayer.isAlive = false;
+                    systemMessageText = `${eliminatedPlayer.name} が追放されました。正体は【${roleName}】でした。`;
+
+                    // ★ 人狼の相棒 (wolf_mate) の道連れロジック ★
+                    if (eliminatedPlayer.role === 'wolf_mate') {
+                        const alivePlayerIds = Object.entries(newPlayers)
+                            .filter(([id, data]) => data.isAlive && id !== eliminatedId)
+                            .map(([id]) => id);
+                        
+                        if (alivePlayerIds.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * alivePlayerIds.length);
+                            const dochoPlayerId = alivePlayerIds[randomIndex];
+                            const dochoPlayer = newPlayers[dochoPlayerId];
+                            
+                            dochoPlayer.isAlive = false;
+                            systemMessageText += `\n【人狼の相棒の道連れ能力発動！】 ${dochoPlayer.name} が犠牲になりました。`;
+                        } else {
+                             systemMessageText += `\n【人狼の相棒の道連れ能力発動！】しかし、他に生存者がいないため能力は空振りに終わりました。`;
+                        }
+                    }
+                    // ★ ロジック終わり ★
+
                 } else {
                     systemMessageText = '追放者はいませんでした (同数票など)。';
                 }
@@ -927,13 +962,14 @@
                 } else {
                     nextStatus = 'night';
                     nextPhase = 'action';
-                    nextDayCount++; // 日数をインクリメント
-                    systemMessageText = `${nextDayCount}日目の夜になりました。能力者は行動を選択してください。`;
+                    // nextDayCount は夜明けの時にインクリメントされるためここではしない
+                    systemMessageText = `${currentData.dayCount}日目の夜になりました。能力者は行動を選択してください。`;
                 }
             } else if (currentData.status === 'night' && currentData.phase === 'action') {
                 // 夜の行動 -> 翌日の議論
                 nextStatus = 'day';
                 nextPhase = 'discussion';
+                nextDayCount++; // 日数をインクリメント
                 
                 // ★夜の行動結果を判定★
                 const wTarget = currentData.werewolfTarget;
@@ -958,7 +994,14 @@
                     nightResultText = `犠牲者はいませんでした。`;
                 }
 
-                systemMessageText = `${nextDayCount + 1}日目の朝です。${nightResultText}`;
+                // ★ パン屋のメッセージを追加 ★
+                const bakerAlive = Object.values(newPlayers).some(p => p.role === 'baker' && p.isAlive);
+                let bakerMessage = '';
+                if (bakerAlive) {
+                    bakerMessage = '村中にパンが焼けるいい匂いが漂っています。今日も平和な一日になりそうです。';
+                }
+
+                systemMessageText = `${nextDayCount}日目の朝です。${nightResultText} ${bakerMessage}`;
                 
                 // 夜の行動後に再度勝利判定
                 winner = checkWinCondition(newPlayers);
@@ -985,9 +1028,9 @@
                 phase: nextPhase,
                 dayCount: nextDayCount,
                 eliminatedId: eliminatedId,
-                lastActionTarget: null, // 昼のアクションターゲットをリセット
-                werewolfTarget: null, // 夜のアクションターゲットをリセット
-                guardTarget: null,    // 夜のアクションターゲットをリセット
+                lastActionTarget: null, 
+                werewolfTarget: null, 
+                guardTarget: null,    
                 messages: arrayUnion(newMessage),
                 players: newPlayers,
                 winner: winner,
@@ -1034,32 +1077,34 @@
             }
         });
 
-        /** 役割のランダム割り当て (騎士を追加) */
+        /** 役割のランダム割り当て (wolf_mateとbakerを追加) */
         function assignRoles(players) {
             const playerIds = Object.keys(players);
             const playerCount = playerIds.length;
             let roles = [];
             
-            // 役割構成の決定
+            // 基本役職
+            roles.push('werewolf', 'seer');
             if (playerCount >= 4) {
-                // 4人以上: 人狼1, 占い1, 騎士1 は確保
-                roles.push('werewolf', 'seer', 'guard');
-            } else if (playerCount === 3) {
-                // 3人: 人狼1, 占い1, 村人1 (騎士は入れない)
-                roles.push('werewolf', 'seer', 'villager'); // 3人目も村人として追加
-            } else {
-                // 参加人数が少ない場合は処理を中断
-                return players;
+                roles.push('guard');
+            }
+
+            // プレイヤー数による特殊役職の追加
+            if (playerCount === 5) {
+                // 5人時はパン屋を追加 (人狼1, 占い1, 騎士1, パン屋1)
+                roles.push('baker');
+            } else if (playerCount >= 6) {
+                // 6人以上時は人狼の相棒を追加 (人狼1, 占い1, 騎士1, 相棒1)
+                roles.push('wolf_mate');
             }
 
             // 残りを村人にする
-            const initialRolesCount = roles.length;
-            const requiredVillagers = playerCount - initialRolesCount;
+            const requiredVillagers = playerCount - roles.length;
             for (let i = 0; i < requiredVillagers; i++) {
                 roles.push('villager');
             }
             
-            // 役割数が不足していた場合の緊急処理（通常は上記ロジックで不要だが念のため）
+            // 役割数が不足していた場合の緊急処理
             if (roles.length < playerCount) {
                 while(roles.length < playerCount) {
                     roles.push('villager');
@@ -1090,7 +1135,7 @@
         /** ゲームリセット (GM操作) */
         resetGameButton.addEventListener('click', async () => {
             if (gameState.hostId !== userId) return;
-            // confirm() の代わりにモーダルを使うべきですが、GM操作なのでここでは一時的に console.log で代用します
+            // アラートの代わりにモーダルを使うべきですが、GM操作なのでここでは一時的に console.log で代用します
             console.log('ゲームをリセット（削除）します。');
 
             try {
