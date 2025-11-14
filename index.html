@@ -813,7 +813,7 @@
                 });
                 
                 displayMessage("3枚組を公開しました！この後、不要な牌を1枚捨ててターンを終了してください。", 'success');
-                isDrawingPhase = true; // 鳴き後は牌を捨てる必要がある (ローカルで即座に反映)
+                isDrawingPhase = false; // 鳴き後は牌を捨てる必要がある (ローカルで即座に反映)
                 selectedTileId = null;
                 updateUI();
                 updateGameUI(roomData);
