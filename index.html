@@ -25,7 +25,7 @@
             measurementId: "G-RFX7NK1Q28"
         };
         
-        const firebaseConfig = FIREBASE_CONFIG;
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : FIREBASE_CONFIG;
         const appId = typeof __app_id !== 'undefined' ? __app_id : FIREBASE_CONFIG.projectId;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
@@ -35,6 +35,7 @@
         let auth;
         let userId = null;
         let isAuthReady = false;
+        let playerName = null; // プレイヤー名
 
         // ゲーム関連のグローバル変数
         let roomId = '';
@@ -45,7 +46,7 @@
         
         let myPlayerIndex = -1; 
         let playerHand = [];
-        let playerOpenTiles = []; // 公開牌 (ポンで固定された牌)
+        let playerOpenTiles = []; // 公開牌 (3枚組で固定された牌)
         let isDrawingPhase = false; // true: 牌を引いた直後 (9枚状態), false: 牌を捨てた直後 (8枚状態)
         let selectedTileId = null;
 
@@ -70,17 +71,17 @@
         const drawButton = document.getElementById('draw-button');
         const checkButton = document.getElementById('check-button');
         const discardSelectedButton = document.getElementById('discard-selected-button');
-        const ponButton = document.getElementById('pon-button'); // ポンボタンを追加
         const handContainer = document.getElementById('hand-container');
-        const openTilesContainer = document.getElementById('open-tiles-container'); // 公開牌コンテナ
+        const openTilesContainer = document.getElementById('open-tiles-container'); 
         const opponentHandContainer = document.getElementById('opponent-hand-container');
-        const opponentOpenTilesContainer = document.getElementById('opponent-open-tiles-container'); // 相手の公開牌コンテナ
+        const opponentOpenTilesContainer = document.getElementById('opponent-open-tiles-container'); 
         const deckCountDisplay = document.getElementById('deck-count');
         const discardContainer = document.getElementById('discard-container');
         const messageBox = document.getElementById('message-box');
         const connectionStatus = document.getElementById('connection-status');
         const currentTurnDisplay = document.getElementById('current-turn');
         const userIdDisplay = document.getElementById('user-id-display');
+        const playerNameDisplay = document.getElementById('player-name-display');
         
         // チャット関連DOM要素
         const messagesList = document.getElementById('messages-list');
@@ -105,12 +106,13 @@
                         userId = auth.currentUser.uid;
                     }
                     isAuthReady = true;
-                    userIdDisplay.textContent = `あなたのID: ${userId}`;
-                    displayMessage("認証完了。ルームを作成または参加してください。", 'normal');
+                    userIdDisplay.textContent = `内部ID: ${userId}`;
+                    displayMessage("認証完了。名前を設定し、ルームを作成または参加してください。", 'normal');
                     document.getElementById('loading-message').style.display = 'none';
                     lobbyContainer.style.display = 'block';
                     connectionStatus.textContent = '同期待機中...';
                     connectionStatus.style.backgroundColor = '#ccc';
+                    updateLobbyButtonState();
                 });
 
                 if (initialAuthToken) {
@@ -121,6 +123,27 @@
                 console.error("Firebase初期化エラー:", error);
                 displayMessage("Firebase初期化に失敗しました。", 'error');
             }
+        }
+        
+        function setPlayerName() {
+             const nameInput = document.getElementById('player-name-input');
+             const name = nameInput.value.trim();
+             if (name) {
+                 playerName = name;
+                 playerNameDisplay.textContent = `あなたの名前: ${playerName}`;
+                 document.getElementById('set-name-message').textContent = '名前が設定されました。';
+                 nameInput.disabled = true;
+                 document.getElementById('set-name-button').disabled = true;
+                 updateLobbyButtonState();
+             } else {
+                 document.getElementById('set-name-message').textContent = 'ニックネームを入力してください。';
+             }
+        }
+        
+        function updateLobbyButtonState() {
+             const isDisabled = !isAuthReady || !playerName;
+             document.getElementById('create-room-button').disabled = isDisabled;
+             document.getElementById('join-room-button').disabled = isDisabled;
         }
 
         // -----------------------------------------------------
@@ -155,16 +178,16 @@
                 currentPlayerId: '',
                 status: 'waiting', // 'waiting', 'playing', 'finished'
                 messages: [],
-                // ポン機能のための状態
-                lastDiscardedTile: null, // 最後に捨てられた牌 (ID)
-                discarderId: null,      // 最後に捨てたプレイヤーのID
-                pendingAction: false,   // ポン待ち状態
+                // 相手の捨て牌に対するアクションは無効化するため、関連フィールドはnull/falseに固定
+                lastDiscardedTile: null,
+                discarderId: null,      
+                isDiscardActionPending: false, 
                 lastUpdated: Date.now()
             };
         }
 
         async function createRoom() {
-            if (!isAuthReady || !userId) return;
+            if (!isAuthReady || !userId || !playerName) return;
 
             roomId = crypto.randomUUID().substring(0, 8);
             roomRef = doc(getRoomCollectionRef(), roomId);
@@ -186,7 +209,7 @@
         }
 
         async function joinRoom(id) {
-            if (!isAuthReady || !userId) return;
+            if (!isAuthReady || !userId || !playerName) return;
             roomId = id || document.getElementById('room-id-input').value.trim();
             roomRef = doc(getRoomCollectionRef(), roomId);
             isHost = false; 
@@ -212,12 +235,13 @@
                     const existingPlayer = currentRoomData.players.find(p => p.userId === userId);
                     if (existingPlayer) {
                          myPlayerIndex = currentRoomData.players.indexOf(existingPlayer);
+                         playerName = existingPlayer.displayName; // 既存の名前を使用
                          return;
                     }
 
                     const isNewHost = currentRoomData.players.length === 0;
-                    // openTilesを初期化に追加
-                    const newPlayer = { userId, hand: [], openTiles: [], isHost: isNewHost };
+                    // displayNameを追加
+                    const newPlayer = { userId, displayName: playerName, hand: [], openTiles: [], isHost: isNewHost };
                     const newPlayers = [...currentRoomData.players, newPlayer];
                     myPlayerIndex = newPlayers.length - 1; 
 
@@ -263,19 +287,28 @@
                         playerHand = myState.hand || [];
                         playerOpenTiles = myState.openTiles || [];
                         isHost = myState.isHost;
+                        playerName = myState.displayName; // 名前を同期
                     }
                     
                     // ターン切り替え時のisDrawingPhase更新
                     if (oldData && oldData.currentPlayerId !== roomData.currentPlayerId) {
                          if (roomData.currentPlayerId === userId) {
                              // 自分のターンになった時、手牌の枚数に応じてフェーズを設定
-                             isDrawingPhase = playerHand.length >= HAND_SIZE_WIN; // ポン後の捨牌 or ツモ後の捨牌
-                             displayMessage("あなたのターンです。", 'success');
+                             // 牌を引いた直後 (9枚) の状態ではない
+                             isDrawingPhase = false; 
+                             displayMessage("あなたのターンです。山札から牌を引いてください。", 'success');
                              selectedTileId = null; 
                          } else {
                               isDrawingPhase = false; 
                          }
                     }
+                    
+                    // 自分が引いた直後の場合はメッセージを上書きしない
+                    if (roomData.currentPlayerId === userId && playerHand.length === HAND_SIZE_WIN) {
+                         isDrawingPhase = true;
+                         displayMessage("山札から牌を引きました (手牌9枚)。捨てる牌を選択し、ターンを終了してください。", 'success');
+                    }
+
 
                     if (roomData.status === 'finished') {
                         endGame(roomData.winnerId || null);
@@ -309,7 +342,6 @@
                     const currentRoomData = (await transaction.get(roomRef)).data();
                     if (currentRoomData.players.length !== 2) return;
 
-                    // 公開牌を初期化に追加
                     const players = currentRoomData.players.map(p => ({ ...p, hand: [], openTiles: [] }));
                     let deck = currentRoomData.deck;
 
@@ -327,9 +359,10 @@
                         deck: deck,
                         currentPlayerId: startingPlayerId,
                         status: 'playing',
+                        // 相手の捨て牌に対するアクションを無効化
                         lastDiscardedTile: null,
                         discarderId: null,
-                        pendingAction: false,
+                        isDiscardActionPending: false, 
                         lastUpdated: Date.now()
                     });
                 });
@@ -358,17 +391,16 @@
 
         function updateGameUI(data) {
             if (!data || data.status !== 'playing') {
-                // ... (ロビー表示ロジックは省略)
+                // ロビー表示ロジック
                 currentTurnDisplay.textContent = 'ゲーム待ち';
                 currentTurnDisplay.style.backgroundColor = '#ccc';
                 drawButton.disabled = true;
                 checkButton.disabled = true;
                 discardSelectedButton.style.display = 'none';
-                ponButton.style.display = 'none';
                 document.getElementById('start-game-button').style.display = (isHost && data && data.players.length === 2 && data.status === 'waiting') ? 'inline-block' : 'none';
                 
                 const playersInfo = data ? data.players.map(p => 
-                    `${p.userId === userId ? 'あなた (Me)' : '対戦相手 (Opponent)'} ${p.isHost ? '(HOST)' : ''}`
+                    `${p.displayName || `User-${p.userId.substring(0, 4)}`} ${p.userId === userId ? '(あなた)' : '(相手)'} ${p.isHost ? '(HOST)' : ''}`
                 ).join(' / ') : 'プレイヤー: 1人';
                 document.getElementById('player-list').textContent = playersInfo;
                 
@@ -378,37 +410,21 @@
             const myTurn = data.currentPlayerId === userId;
             const opponentPlayerState = data.players.find(p => p.userId !== userId);
             
-            // ポン待ち状態か？
-            const isPonPending = data.pendingAction && data.discarderId !== userId;
-            
             // ターン表示
             currentTurnDisplay.textContent = myTurn ? 'あなたのターン' : '相手のターン';
             currentTurnDisplay.style.backgroundColor = myTurn ? '#aaffaa' : '#ffaaaa';
             
-            // ポン可能チェック
-            const canPon = isPonPending && isPossiblePon(data.lastDiscardedTile, playerHand);
-            
             // ボタン制御
-            drawButton.disabled = !myTurn || isDrawingPhase || data.deck.length === 0 || isPonPending;
-            checkButton.disabled = !myTurn || playerHand.length !== HAND_SIZE_WIN || isPonPending;
+            // 自分のターンで、まだ引いていない状態 (8枚状態) なら引くボタンを有効化
+            drawButton.disabled = !myTurn || isDrawingPhase || data.deck.length === 0 || playerHand.length !== HAND_SIZE_START;
+            
+            // 自分のターンで、引いた直後 (9枚状態) なら役判定/捨てるボタンを有効化
+            checkButton.disabled = !myTurn || playerHand.length !== HAND_SIZE_WIN;
+            
+            // 捨てるボタンは、自分のターンで牌を引いた後 (isDrawingPhase=true) に表示
             discardSelectedButton.style.display = (myTurn && isDrawingPhase) ? 'inline-block' : 'none';
             discardSelectedButton.disabled = !selectedTileId;
             
-            // ポンボタンの表示
-            ponButton.style.display = canPon ? 'inline-block' : 'none';
-            drawButton.style.display = isPonPending ? 'none' : 'inline-block'; // ポン待ち中は山札を引けない
-            
-            // ポン待ちメッセージ
-            if (isPonPending && !canPon && !myTurn) {
-                displayMessage("相手の捨牌をポンできるか確認中です。", 'normal');
-            }
-            if (canPon) {
-                const tileType = data.lastDiscardedTile.substring(0, 2);
-                const tileDisplayName = tileType === SPECIAL_TILE ? SPECIAL_TILE_NAME : TILE_NAMES[tileType];
-                displayMessage(`対戦相手が${tileDisplayName}を捨てました。ポンしますか？`, 'success');
-            }
-
-
             // 山札と捨て牌
             deckCountDisplay.textContent = data.deck.length;
             renderDiscardedTiles(data.discardedTiles);
@@ -509,9 +525,9 @@
         }
 
         function handleTileClick(event) {
-            // ポン後の捨牌 or ツモ後の捨牌時のみ選択可能
-            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase) {
-                displayMessage("あなたのターンで、牌を引いた後でのみ捨てる牌を選択できます。", 'error');
+            // 牌を引いた直後 (9枚状態) でのみ捨てる牌を選択可能
+            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || playerHand.length !== HAND_SIZE_WIN) {
+                displayMessage("山札から牌を引いた後でのみ、捨てる牌を選択できます。", 'error');
                 return;
             }
 
@@ -529,7 +545,7 @@
                 tileElement.classList.add('selected');
                 selectedTileId = tileId;
                 const tileDisplayName = (tileId.startsWith(SPECIAL_TILE)) ? SPECIAL_TILE_NAME : TILE_NAMES[tileId.substring(0, 2)];
-                displayMessage(`${tileDisplayName}の牌を選択しました。この牌を捨てるか、役判定を行ってください。`);
+                displayMessage(`${tileDisplayName}の牌を選択しました。この牌を捨ててターンを終了してください。`);
             } else {
                 displayMessage("捨てる牌を選択してください。");
             }
@@ -544,7 +560,7 @@
          * 山札から牌を引く
          */
         async function drawTile() {
-            if (!roomData || roomData.currentPlayerId !== userId || isDrawingPhase || roomData.deck.length === 0 || roomData.pendingAction) return;
+            if (!roomData || roomData.currentPlayerId !== userId || isDrawingPhase || roomData.deck.length === 0 || playerHand.length !== HAND_SIZE_START) return;
             
             try {
                 await runTransaction(db, async (transaction) => {
@@ -563,11 +579,12 @@
                     });
                 });
 
+                // UIはonSnapshotで更新されるが、ローカル状態も更新
                 isDrawingPhase = true;
                 selectedTileId = null;
                 updateUI();
                 updateGameUI(roomData);
-                displayMessage("山札から牌を引きました (手牌9枚)。捨てる牌を選択してください。", 'success');
+                displayMessage("山札から牌を引きました (手牌9枚)。捨てる牌を選択し、ターンを終了してください。", 'success');
 
             } catch (error) {
                 console.error("牌を引くエラー:", error);
@@ -576,10 +593,10 @@
         }
 
         /**
-         * 選択した牌を捨てる
+         * 選択した牌を捨てる (即座にターン終了)
          */
         async function discardSelectedTile() {
-            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId) return;
+            if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId || playerHand.length !== HAND_SIZE_WIN) return;
 
             const tileIdToDiscard = selectedTileId;
             const tileType = tileIdToDiscard.substring(0, 2);
@@ -598,18 +615,19 @@
                     currentHand.splice(tileIndex, 1);
                     currentRoomData.discardedTiles.push(tileIdToDiscard);
 
-                    // 次のプレイヤーIDを決定
-                    const opponent = currentRoomData.players.find(p => p.userId !== userId);
-                    const nextPlayerId = opponent.userId;
+                    // ターンを次のプレイヤーに渡す
+                    const discarderIndex = currentRoomData.players.findIndex(p => p.userId === userId);
+                    const nextPlayerIndex = (discarderIndex + 1) % currentRoomData.players.length;
+                    const nextPlayerId = currentRoomData.players[nextPlayerIndex].userId;
 
-                    // ポン待ち状態を設定
                     const updateData = {
                         players: currentRoomData.players,
                         discardedTiles: currentRoomData.discardedTiles,
-                        lastDiscardedTile: tileIdToDiscard,
-                        discarderId: userId,
-                        pendingAction: true, // ポン待ち状態へ移行
-                        currentPlayerId: userId, // ターンは一旦自分に保持 (相手のポンアクションを待つ)
+                        // 相手の捨て牌に対するアクションを無効化するため、関連フィールドをクリア
+                        lastDiscardedTile: null,
+                        discarderId: null,
+                        isDiscardActionPending: false, 
+                        currentPlayerId: nextPlayerId, // 次のプレイヤーにターンを渡す
                         lastUpdated: Date.now()
                     };
 
@@ -617,12 +635,12 @@
                 });
 
                 // トランザクション成功後のローカルUI更新
-                isDrawingPhase = false;
+                isDrawingPhase = false; // ターン終了
                 selectedTileId = null;
                 updateUI();
                 updateGameUI(roomData);
                 const tileDisplayName = (tileType === SPECIAL_TILE) ? SPECIAL_TILE_NAME : TILE_NAMES[tileType];
-                displayMessage(`${tileDisplayName}を捨てました。相手の反応を待っています...`);
+                displayMessage(`${tileDisplayName}を捨ててターンを終了しました。`);
 
             } catch (error) {
                  console.error("牌を捨てるエラー:", error);
@@ -630,142 +648,8 @@
             }
         }
         
-        /**
-         * 相手の捨牌をポンできるか判定 (ローカル関数)
-         */
-        function isPossiblePon(discardedTileId, hand) {
-            if (!discardedTileId) return false;
-            
-            const discardedType = discardedTileId.substring(0, 2);
-            if (!discardedType) return false;
-            
-            const handTypes = hand.map(id => id.substring(0, 2));
-            const handCounts = handTypes.reduce((acc, type) => {
-                acc[type] = (acc[type] || 0) + 1;
-                return acc;
-            }, {});
-
-            const myTypeCount = handCounts[discardedType] || 0;
-            const otaniCount = handCounts[SPECIAL_TILE] || 0;
-            
-            // 刻子を作るには、自分の手牌に同じ牌が2枚必要
-            return myTypeCount + otaniCount >= 2;
-        }
-
-        /**
-         * ポンを実行
-         */
-        async function executePon() {
-            if (!roomData || roomData.currentPlayerId === roomData.discarderId || !roomData.pendingAction) return;
-            const discardedTileId = roomData.lastDiscardedTile;
-            if (!discardedTileId || !isPossiblePon(discardedTileId, playerHand)) {
-                displayMessage("ポンはできません。", 'error');
-                return;
-            }
-
-            const discardedType = discardedTileId.substring(0, 2);
-            
-            try {
-                 await runTransaction(db, async (transaction) => {
-                    const currentRoomData = (await transaction.get(roomRef)).data();
-                    const myState = currentRoomData.players[myPlayerIndex];
-                    
-                    // 1. ポン牌（捨て牌）を捨て牌リストから削除
-                    const lastDiscardedIndex = currentRoomData.discardedTiles.lastIndexOf(discardedTileId);
-                    if (lastDiscardedIndex === -1) throw new Error("捨て牌が見つかりません。");
-                    currentRoomData.discardedTiles.splice(lastDiscardedIndex, 1);
-
-                    // 2. 手牌からポンに必要な2枚を探して削除
-                    const neededCount = 2;
-                    let removedCount = 0;
-                    const handToRemove = [];
-
-                    // 優先度1: 通常牌
-                    for (let i = myState.hand.length - 1; i >= 0 && removedCount < neededCount; i--) {
-                        if (myState.hand[i].startsWith(discardedType)) {
-                            handToRemove.push(myState.hand.splice(i, 1)[0]);
-                            removedCount++;
-                        }
-                    }
-                    
-                    // 優先度2: 大谷牌で補完
-                    if (removedCount < neededCount) {
-                        for (let i = myState.hand.length - 1; i >= 0 && removedCount < neededCount; i--) {
-                            if (myState.hand[i].startsWith(SPECIAL_TILE)) {
-                                handToRemove.push(myState.hand.splice(i, 1)[0]);
-                                removedCount++;
-                            }
-                        }
-                    }
-                    
-                    if (removedCount !== neededCount) throw new Error("ポンに必要な牌が見つかりませんでした。");
-                    
-                    // 3. 公開牌リストに追加
-                    const newOpenSet = [discardedTileId, ...handToRemove];
-                    myState.openTiles.push(newOpenSet);
-                    
-                    // 4. ルーム状態の更新
-                    const opponent = currentRoomData.players.find(p => p.userId === currentRoomData.discarderId);
-                    
-                    currentRoomData.currentPlayerId = userId; // ポンしたプレイヤーにターンが移る
-                    currentRoomData.pendingAction = false;
-                    currentRoomData.lastDiscardedTile = null;
-                    currentRoomData.discarderId = null;
-
-                    transaction.update(roomRef, {
-                        players: currentRoomData.players,
-                        discardedTiles: currentRoomData.discardedTiles,
-                        currentPlayerId: userId,
-                        pendingAction: false,
-                        lastDiscardedTile: null,
-                        discarderId: null,
-                        lastUpdated: Date.now()
-                    });
-                });
-                
-                // ポン成功後のUI更新
-                isDrawingPhase = true; // ポン後は捨牌が必要
-                selectedTileId = null;
-                updateUI();
-                updateGameUI(roomData);
-                const tileDisplayName = (discardedType === SPECIAL_TILE) ? SPECIAL_TILE_NAME : TILE_NAMES[discardedType];
-                displayMessage(`${tileDisplayName}をポンしました。捨てる牌を選択してください。`, 'success');
-
-            } catch (error) {
-                 console.error("ポン実行エラー:", error);
-                 displayMessage(`ポン実行に失敗しました: ${error.message}`, 'error');
-            }
-        }
-        
-        /**
-         * ポンをスキップし、ターンを相手に渡す
-         */
-        async function skipPon() {
-             if (!roomData || roomData.currentPlayerId === roomData.discarderId || !roomData.pendingAction) return;
-
-             try {
-                await runTransaction(db, async (transaction) => {
-                    const currentRoomData = (await transaction.get(roomRef)).data();
-                    
-                    // 次のプレイヤーIDを決定 (ポンをスキップしたので、捨てたプレイヤーの次の番)
-                    const opponent = currentRoomData.players.find(p => p.userId === currentRoomData.discarderId);
-                    const nextPlayer = currentRoomData.players.find(p => p.userId !== opponent.userId);
-
-                    transaction.update(roomRef, {
-                        currentPlayerId: nextPlayer.userId, // ポンをスキップしたので、次のプレイヤーにターンを渡す
-                        pendingAction: false,
-                        lastDiscardedTile: null,
-                        discarderId: null,
-                        lastUpdated: Date.now()
-                    });
-                });
-                displayMessage("ポンをスキップし、あなたのターンになりました。山札から牌を引いてください。", 'normal');
-
-            } catch (error) {
-                 console.error("ポン スキップエラー:", error);
-                 displayMessage(`ポン スキップに失敗しました: ${error.message}`, 'error');
-            }
-        }
+        // **注: 相手の捨て牌に対する「3枚組を公開する」 (ポン/チー) 機能は無効化されました。**
+        // 以下の executeOpenSet や skipAction 関連のロジックは使用されません。
 
 
         /**
@@ -788,32 +672,25 @@
         }
         
         /**
-         * 役の判定 (手牌9枚 + 公開牌の合計が「3枚組×3」と「雀頭(2枚組)×1」の構成可能か)
+         * 役の判定 (3枚組×3 と 雀頭(2枚組)×1 の構成可能か)
          */
         function checkYaku(allTiles) {
-            // 公開牌は既に3枚組として確定しているため、残りの牌だけで雀頭と3枚組を作る必要がある。
-            // 雀頭 (2枚) + 3枚組 * 2 = 8枚。
-            // 9枚の手牌から1枚を捨てる前提で、手牌 + 公開牌の合計が 8枚 + 公開牌数 になっている必要がある。
-            const totalHandSize = playerHand.length + playerOpenTiles.flat().length;
-
-            // 鳴きなし (公開牌なし) の場合は、9枚の手牌から1枚を選び、残りの8枚で判定
+            // 自分の手牌と公開牌を合わせて役を判定する
+            
+            // 公開牌がない場合（自力ツモ上がり判定）
             if (playerOpenTiles.length === 0) {
                  if (playerHand.length !== HAND_SIZE_WIN) return false;
+                 // 9枚の手牌から1枚を雀頭として、残りの8枚を3枚組×2と雀頭×1に分解
                  for (let i = 0; i < playerHand.length; i++) {
                      const eightTiles = [...playerHand.slice(0, i), ...playerHand.slice(i + 1)];
-                     if (canFormYaku(eightTiles)) {
+                     // 雀頭を含めて8枚で役が成立するかチェック (公開牌は0セット)
+                     if (canFormYaku(eightTiles, 0)) { 
                          return true;
                      }
                  }
                  return false;
             } else {
-                // 鳴きあり (公開牌あり) の場合は、手牌が 9 - (公開牌数 * 3) + 1 枚になっているはず。
-                // 9枚の手牌から1枚を捨てた残り (8枚) + 公開牌の合計で役が成立するかをチェックする
-                // ポン後の手牌は8枚なので、そのまま役判定
-                if (playerHand.length === HAND_SIZE_START) {
-                    return canFormYaku(playerHand, playerOpenTiles.length);
-                }
-                // ポン直後の9枚状態から1枚捨ててアガる場合
+                // 公開牌がある場合 (現在の実装では、相手の捨て牌に対する公開は無効化されているため、このパスは通らないはずですが、保険として残します)
                 if (playerHand.length === HAND_SIZE_WIN) {
                     for (let i = 0; i < playerHand.length; i++) {
                         const eightTiles = [...playerHand.slice(0, i), ...playerHand.slice(i + 1)];
@@ -821,7 +698,6 @@
                             return true;
                         }
                     }
-                    return false;
                 }
             }
             return false;
@@ -832,7 +708,7 @@
          * openSetsCount: 既に公開されている3枚組の数
          */
         function canFormYaku(hand, openSetsCount = 0) {
-             const requiredSets = 2 + openSetsCount; // 必要な3枚組の総数 (手牌内で作るべきは 2個)
+             const requiredSets = 2 + openSetsCount; 
              const requiredHandSize = 8;
              if (hand.length !== requiredHandSize) return false;
 
@@ -856,10 +732,8 @@
                  let tempCounts = { ...counts };
                  let canFormHead = false;
                  
-                 // 雀頭を大谷牌2枚で構成 (不可能) -> スキップ
                  if (headType === SPECIAL_TILE) continue;
                  
-                 // 雀頭の候補牌が存在しないか、既に使われている牌の場合はスキップ
                  if (!tempCounts[headType] && headType !== SPECIAL_TILE) continue;
 
                  // 雀頭を通常牌2枚で構成
@@ -883,8 +757,7 @@
                           }
                      }
                      
-                     // 残り6枚（3枚組×2）で構成可能か再帰的にチェック
-                     if (canFormSets(remainingTiles, tempOtaniCount, 2)) {
+                     if (canFormSets(remainingTiles, tempOtaniCount, requiredSets)) { // requiredSetsを使用
                           return true;
                      }
                  }
@@ -895,9 +768,6 @@
         
         /**
          * 残りの手牌が全て3枚組で構成可能かをチェック (再帰関数)
-         * tiles: 残りの牌タイプ配列
-         * otaniCount: 残りの大谷牌の数
-         * setsToFind: 作成すべき3枚組の数 (通常は2)
          */
         function canFormSets(tiles, otaniCount, setsToFind) {
              if (setsToFind === 0) return tiles.length === 0;
@@ -1022,7 +892,7 @@
 
             const newMessage = {
                 senderId: userId,
-                senderAlias: `User-${userId.substring(0, 4)}`, 
+                senderAlias: playerName || `User-${userId.substring(0, 4)}`, // ニックネームを使用
                 text: messageText,
                 timestamp: Date.now()
             };
@@ -1068,10 +938,10 @@
             drawButton.disabled = true;
             checkButton.disabled = true;
             discardSelectedButton.style.display = 'none';
-            ponButton.style.display = 'none';
 
             if (winnerId) {
-                 connectionStatus.textContent = `ゲーム終了。勝者: ${winnerId === userId ? 'あなた' : '相手'}`;
+                 const winnerName = roomData.players.find(p => p.userId === winnerId)?.displayName || `User-${winnerId.substring(0, 4)}`;
+                 connectionStatus.textContent = `ゲーム終了。勝者: ${winnerId === userId ? 'あなた' : winnerName}`;
                  connectionStatus.style.backgroundColor = winnerId === userId ? '#00FF00' : '#FF0000';
             } else {
                  connectionStatus.textContent = `ゲーム終了。`;
@@ -1084,7 +954,7 @@
             }
             setTimeout(() => {
                 location.reload(); 
-            }, 3000);
+            }, 5000);
         }
         
         function shuffle(array) {
@@ -1100,16 +970,13 @@
         // -----------------------------------------------------
 
         document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('set-name-button').addEventListener('click', setPlayerName);
             document.getElementById('create-room-button').addEventListener('click', createRoom);
             document.getElementById('join-room-button').addEventListener('click', () => joinRoom());
             document.getElementById('start-game-button').addEventListener('click', startGame);
             drawButton.onclick = drawTile;
             checkButton.onclick = checkHandForYaku;
             discardSelectedButton.onclick = discardSelectedTile;
-            
-            // ポンボタンのクリックハンドラ
-            ponButton.onclick = executePon;
-            document.getElementById('skip-pon-button').onclick = skipPon;
             
             sendButton.addEventListener('click', sendMessage);
             chatInput.addEventListener('keypress', (e) => {
@@ -1214,10 +1081,10 @@
             background-color: #FFD700; /* Gold */
             border-color: var(--primary-color);
             font-size: 0; 
-            background-size: cover;
+            background-size: 80% 80%;
             background-position: center;
             background-repeat: no-repeat;
-            /* 大谷選手のイメージを示すためのプレースホルダー画像 */
+            /* 大谷選手の画像は著作権の関係でプレースホルダーに置き換えます */
             background-image: url('https://placehold.co/45x60/FFD700/003366?text=OHTANI');
         }
         
@@ -1364,8 +1231,20 @@
             text-align: center;
             display: none;
         }
-        /* ... (ロビーCSSは変更なし) ... */
         
+        .input-group {
+             margin-bottom: 15px;
+             padding: 10px;
+             border: 1px solid #eee;
+             border-radius: 8px;
+        }
+        .input-group input {
+            padding: 8px;
+            margin-right: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
         /* --- チャットエリアのスタイル --- */
         #chat-container {
             width: 300px;
@@ -1378,7 +1257,6 @@
             padding: 10px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
         }
-
         #messages-list {
             flex-grow: 1;
             height: 400px;
@@ -1387,7 +1265,7 @@
             padding-right: 5px;
             scroll-behavior: smooth;
         }
-        /* ... (チャットCSSは変更なし) ... */
+        /* ... (その他のチャットCSSは省略) ... */
         
         /* レスポンシブ対応 */
         @media (max-width: 800px) {
@@ -1411,16 +1289,25 @@
     <!-- ロビー画面 -->
     <div id="lobby-container">
         <div id="connection-status">同期待機中...</div>
+        
+        <div class="input-group">
+            <h2 style="color: #444;">あなたの名前を決める</h2>
+            <input type="text" id="player-name-input" placeholder="ニックネームを入力 (必須)" maxlength="10">
+            <button id="set-name-button" class="btn" style="background-color: #5cb85c; color: white;">名前を決定</button>
+            <p id="set-name-message" style="font-size: 0.9em; color: #CC3333; margin-top: 5px;"></p>
+        </div>
+        <p id="player-name-display">あなたの名前: 未設定</p>
+        <p id="user-id-display" style="font-size: 0.8em; color: #777;">内部ID: ロード中...</p>
+
         <div class="input-group">
             <h2 style="color: var(--secondary-color);">ルームを作成</h2>
-            <button id="create-room-button" class="btn btn-secondary">新規ルーム作成</button>
+            <button id="create-room-button" class="btn btn-secondary" disabled>新規ルーム作成</button>
         </div>
         <div class="input-group">
             <h2 style="color: var(--primary-color);">ルームに参加</h2>
             <input type="text" id="room-id-input" placeholder="ルームIDを入力" maxlength="8">
-            <button id="join-room-button" class="btn btn-primary">参加</button>
+            <button id="join-room-button" class="btn btn-primary" disabled>参加</button>
         </div>
-        <p id="user-id-display">あなたのID: ロード中...</p>
     </div>
 
     <!-- ゲーム＆チャット画面 -->
@@ -1465,7 +1352,7 @@
                 <h2 style="margin-top: 0; color: #555;">あなたの手牌 (<span id="hand-count">0</span>枚)</h2>
                 <p id="current-turn" style="font-weight: bold; padding: 5px; border-radius: 4px; text-align: center;"></p>
                 
-                <h3 style="margin: 5px 0 5px 0; font-size: 1.1em; color: #444;">公開牌 (ポン)</h3>
+                <h3 style="margin: 5px 0 5px 0; font-size: 1.1em; color: #444;">公開された3枚組</h3>
                 <div id="open-tiles-container" class="open-tiles-area">
                     <!-- 自分の公開牌 -->
                 </div>
@@ -1479,9 +1366,7 @@
             <!-- コントロールエリア -->
             <div class="controls">
                 <button id="draw-button" class="btn btn-primary" disabled>山札から1枚引く</button>
-                <button id="pon-button" class="btn btn-secondary" style="display: none;">ポンする</button>
-                <button id="skip-pon-button" class="btn" style="background-color: #888; color: white; display: none;">スキップ</button>
-                <button id="discard-selected-button" class="btn btn-primary" style="display: none;" disabled>選択した牌を捨てる</button>
+                <button id="discard-selected-button" class="btn btn-primary" style="display: none;" disabled>選択した牌を捨ててターン終了</button>
                 <button id="check-button" class="btn btn-secondary" disabled>役を判定する</button>
                 <button id="start-game-button" class="btn btn-secondary" style="display: none;">ゲーム開始 (ホストのみ)</button>
             </div>
