@@ -46,6 +46,7 @@
         
         let myPlayerIndex = -1; 
         let playerHand = [];
+        // NOTE: playerOpenTilesは、ローカルではArray<Array<string>>として扱う
         let playerOpenTiles = []; // 公開牌 (3枚組で固定された牌)
         let isDrawingPhase = false; // true: 牌を引いた直後 (9枚状態), false: 牌を捨てた直後 (8枚状態)
         let selectedTileId = null;
@@ -237,13 +238,20 @@
                     const existingPlayer = currentRoomData.players.find(p => p.userId === userId);
                     if (existingPlayer) {
                          myPlayerIndex = currentRoomData.players.indexOf(existingPlayer);
+                         // NOTE: openTilesがJSON stringで保存されているため、ここでは扱わない
                          playerName = existingPlayer.displayName; // 既存の名前を使用
                          return;
                     }
 
                     const isNewHost = currentRoomData.players.length === 0;
-                    // displayNameを追加
-                    const newPlayer = { userId, displayName: playerName, hand: [], openTiles: [], isHost: isNewHost };
+                    // openTilesは配列の配列になるため、Firestoreの制約を避けるためにJSON文字列として保存
+                    const newPlayer = { 
+                        userId, 
+                        displayName: playerName, 
+                        hand: [], 
+                        openTiles: JSON.stringify([]), // <<-- JSONシリアライズ
+                        isHost: isNewHost 
+                    };
                     const newPlayers = [...currentRoomData.players, newPlayer];
                     myPlayerIndex = newPlayers.length - 1; 
 
@@ -287,7 +295,15 @@
                     if (myState) {
                         myPlayerIndex = roomData.players.indexOf(myState);
                         playerHand = myState.hand || [];
-                        playerOpenTiles = myState.openTiles || [];
+                        
+                        // 公開牌をデシリアライズしてローカル変数に格納
+                        try {
+                            playerOpenTiles = JSON.parse(myState.openTiles || '[]');
+                        } catch (e) {
+                            console.error("Error parsing playerOpenTiles:", e);
+                            playerOpenTiles = [];
+                        }
+                        
                         isHost = myState.isHost;
                         playerName = myState.displayName; // 名前を同期
                     }
@@ -346,7 +362,13 @@
                     const currentRoomData = (await transaction.get(roomRef)).data();
                     if (currentRoomData.players.length !== 2) return;
 
-                    const players = currentRoomData.players.map(p => ({ ...p, hand: [], openTiles: [] }));
+                    // players配列を初期化し、openTilesをJSON文字列として保存
+                    const players = currentRoomData.players.map(p => ({ 
+                        ...p, 
+                        hand: [], 
+                        openTiles: JSON.stringify([]) // <<-- JSONシリアライズ
+                    }));
+                    
                     let deck = currentRoomData.deck;
 
                     for (let i = 0; i < HAND_SIZE_START; i++) {
@@ -455,7 +477,15 @@
                 for (let i = 0; i < opponentHandSize; i++) {
                     opponentHandContainer.appendChild(Object.assign(document.createElement('div'), { className: 'tile face-down' }));
                 }
-                renderOpenTiles(opponentPlayerState.openTiles, opponentOpenTilesContainer, true);
+                
+                // 相手の公開牌をデシリアライズしてレンダリング
+                let opponentOpenSets = [];
+                try {
+                    opponentOpenSets = JSON.parse(opponentPlayerState.openTiles || '[]'); // <<-- デシリアライズ
+                } catch(e) {
+                    console.error("Failed to parse opponent open tiles:", e);
+                }
+                renderOpenTiles(opponentOpenSets, opponentOpenTilesContainer, true);
             }
         }
         
@@ -482,6 +512,7 @@
             });
             
             // 公開牌の表示更新
+            // playerOpenTilesはonSnapshotで既にデシリアライズされている
             renderOpenTiles(playerOpenTiles, openTilesContainer);
 
             // 選択状態の更新に応じて捨てるボタンを制御
@@ -662,7 +693,6 @@
         
         /**
          * 相手の捨て牌に対するアクション「3枚組を公開する (ポン)」
-         * NOTE: 2人ドンジャラのため、ポン（刻子）のみ可能としています。
          */
         async function callOpenSet() {
             if (!roomData || roomData.discarderId === userId || !roomData.isDiscardActionPending) return;
@@ -712,15 +742,24 @@
                     // 鳴いた人の手牌と公開牌を更新
                     const actionPlayer = currentRoomData.players.find(p => p.userId === userId);
                     const actionPlayerIndex = currentRoomData.players.indexOf(actionPlayer);
+                    let actionHand = actionPlayer.hand;
 
+                    // 公開牌をデシリアライズ
+                    let actionOpenTiles = [];
+                    try {
+                        actionOpenTiles = JSON.parse(actionPlayer.openTiles || '[]');
+                    } catch(e) {
+                        console.error("Failed to parse open tiles in transaction:", e);
+                    }
+                    
                     // 1. 捨て牌リストから牌を削除 (最後の牌であることを確認)
                     const lastDiscarded = currentRoomData.discardedTiles.pop();
                     if (lastDiscarded !== discardedTileId) {
-                         throw new Error("直前の捨て牌が一致しません。");
+                         // エラー処理を厳密にするため、トランザクションを中断する
+                         throw new Error("直前の捨て牌が一致しません。トランザクションエラー.");
                     }
 
                     // 2. 鳴いたプレイヤーの手牌から必要な2枚を削除
-                    let actionHand = actionPlayer.hand;
                     requiredTiles.forEach(tileToRemove => {
                         const index = actionHand.indexOf(tileToRemove);
                         if (index !== -1) {
@@ -729,10 +768,14 @@
                     });
 
                     // 3. 鳴いたプレイヤーの公開牌に追加 (鳴いた牌も含む3枚組)
-                    actionPlayer.openTiles.push([...requiredTiles, discardedTileId]);
+                    actionOpenTiles.push([...requiredTiles, discardedTileId]);
                     
-                    // 4. Room Dataの更新
-                    currentRoomData.players[actionPlayerIndex] = actionPlayer;
+                    // 4. Room Dataの更新 (openTilesをJSON文字列として保存)
+                    currentRoomData.players[actionPlayerIndex] = {
+                        ...actionPlayer,
+                        hand: actionHand,
+                        openTiles: JSON.stringify(actionOpenTiles) // <<-- 再シリアライズ
+                    };
                     
                     // 鳴いたプレイヤーにターンを渡し、すぐに捨てる状態（9枚状態）にする
                     transaction.update(roomRef, {
@@ -801,6 +844,7 @@
         async function checkHandForYaku() {
             if (!roomData || roomData.currentPlayerId !== userId || playerHand.length !== HAND_SIZE_WIN || roomData.isDiscardActionPending) return;
 
+            // playerOpenTilesは既にデシリアライズされている
             const isYaku = checkYaku([...playerHand, ...playerOpenTiles.flat()]);
 
             if (isYaku) {
@@ -813,8 +857,6 @@
                 displayMessage("役は成立していません。別の牌を捨てるか、次のアクションを選択してください。", 'error');
             }
         }
-        
-        // ... (checkYaku, canFormYaku, canFormSetsのロジックは変更なし) ...
         
         /**
          * 役の判定 (3枚組×3 と 雀頭(2枚組)×1 の構成可能か)
@@ -877,6 +919,7 @@
                  let tempCounts = { ...counts };
                  let canFormHead = false;
                  
+                 // 大谷牌のみを雀頭として使うパターンは、他の牌との組み合わせで既にカバーされているためスキップ
                  if (headType === SPECIAL_TILE) continue;
                  
                  if (!tempCounts[headType] && headType !== SPECIAL_TILE) continue;
