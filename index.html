@@ -48,7 +48,7 @@
         let playerHand = [];
         // NOTE: playerOpenTilesは、ローカルではArray<Array<string>>として扱う
         let playerOpenTiles = []; // 公開牌 (3枚組で固定された牌)
-        let isDrawingPhase = false; // true: 牌を引いた直後 (9枚状態), false: 牌を捨てた直後 (8枚状態)
+        let isDrawingPhase = false; // true: 牌を引いた直後 (9枚状態) または 鳴いた直後 (7枚状態)
         let selectedTileId = null;
 
         // ゲーム定数 (野球ドンジャラ仕様)
@@ -311,15 +311,18 @@
                     // ターン切り替え時のisDrawingPhase更新
                     if (roomData.currentPlayerId === userId && !roomData.isDiscardActionPending) {
                         // 自分のターンになった時、手牌の枚数に応じてフェーズを設定
-                        // 注意: ポン後の手牌は7枚になるが、その状態も「捨てるフェーズ」と見なす
-                        isDrawingPhase = playerHand.length > HAND_SIZE_START; 
-                         if (!isDrawingPhase) {
+                        // isDrawingPhaseは「牌を捨てなければならない状態」を示す
+                        if (playerHand.length === HAND_SIZE_WIN || playerHand.length === HAND_SIZE_START - 1) {
+                             // 9枚 (引いた直後) または 7枚 (鳴いた直後) の場合
+                             isDrawingPhase = true;
+                             displayMessage("あなたのターンです。捨てる牌を選択し、ターンを終了してください。", 'success');
+                             selectedTileId = null; 
+                        } else {
+                             // 8枚 (通常状態) の場合
+                             isDrawingPhase = false;
                              displayMessage("あなたのターンです。山札から牌を引いてください。", 'success');
                              selectedTileId = null; 
-                         } else {
-                             // 鳴きや山札引きでターンが回ってきた場合など、捨てるフェーズ
-                             displayMessage("牌を公開しました。捨てる牌を選択し、ターンを終了してください。", 'success');
-                         }
+                        }
                     } else if (roomData.isDiscardActionPending && roomData.discarderId !== userId) {
                          // 相手の捨て牌に対するアクション待機状態
                          isDrawingPhase = false;
@@ -580,8 +583,10 @@
 
         function handleTileClick(event) {
             // 牌を引いた直後 (isDrawingPhase=true) でのみ捨てる牌を選択可能
+            // isDrawingPhaseがtrueなら、手牌が9枚（引いた後）か7枚（鳴いた後）の状態です。
             if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || roomData.isDiscardActionPending) {
-                displayMessage("牌を引いた後、または鳴きアクションの解決後に、捨てる牌を選択できます。", 'error');
+                // ユーザーが指摘したメッセージを、より簡潔でアクションを促す形に変更
+                displayMessage("現在、牌を**選択して捨てるフェーズ**ではありません。", 'error');
                 return;
             }
 
@@ -634,7 +639,8 @@
                     });
                 });
 
-                // UIはonSnapshotで更新されるが、ローカル状態も更新
+                // トランザクション成功後のローカルUI更新
+                // NOTE: onSnapshotでisDrawingPhaseが正確に更新されるが、即時性を確保するためにここでも更新
                 isDrawingPhase = true;
                 selectedTileId = null;
                 updateUI();
@@ -651,7 +657,7 @@
          * 選択した牌を捨てる (鳴きアクション待機フェーズへ移行)
          */
         async function discardSelectedTile() {
-            // ポン後など、isDrawingPhaseがtrueであれば手牌枚数に関わらず捨てることを許可
+            // isDrawingPhase=true であれば手牌枚数に関わらず捨てることを許可 (7枚または9枚)
             if (!roomData || roomData.currentPlayerId !== userId || !isDrawingPhase || !selectedTileId || roomData.isDiscardActionPending) return;
 
             const tileIdToDiscard = selectedTileId;
@@ -803,7 +809,7 @@
                 });
                 
                 displayMessage("3枚組を公開しました！この後、不要な牌を1枚捨ててターンを終了してください。", 'success');
-                isDrawingPhase = true; // 鳴き後は牌を捨てる必要がある
+                isDrawingPhase = true; // 鳴き後は牌を捨てる必要がある (ローカルで即座に反映)
                 selectedTileId = null;
                 updateUI();
                 updateGameUI(roomData);
