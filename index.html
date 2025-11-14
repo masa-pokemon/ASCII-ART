@@ -303,7 +303,8 @@
                 localStorage.setItem('werewolf_user_name', userName);
                 document.getElementById('current-name-display').textContent = `現在の名前: ${userName}`;
             } else {
-                alert('名前を入力してください。');
+                // NOTE: iframe環境ではalert()は非推奨ですが、ここでは簡易通知として使用します
+                console.error('名前を入力してください。');
             }
         });
 
@@ -320,7 +321,7 @@
 
         /** ゲームを作成する */
         createGameButton.addEventListener('click', async () => {
-            if (!userId || !userName) { alert('先に名前を決定してください。'); return; }
+            if (!userId || !userName) { console.error('先に名前を決定してください。'); return; }
             const newGameId = gameIdInput.value.trim().toUpperCase() || crypto.randomUUID().substring(0, 5).toUpperCase();
 
             const initialGameData = {
@@ -343,18 +344,19 @@
                 gameId = newGameId;
                 localStorage.setItem('werewolf_game_id', gameId);
                 startListening(gameRef);
-                alert(`ゲーム ${newGameId} を作成しました。`);
+                // NOTE: iframe環境ではalert()は非推奨
+                console.log(`ゲーム ${newGameId} を作成しました。`);
             } catch (e) {
                 console.error("ゲーム作成エラー:", e);
-                alert('ゲームの作成中にエラーが発生しました。');
+                // NOTE: iframe環境ではalert()は非推奨
             }
         });
 
         /** ゲームに参加する */
         joinGameButton.addEventListener('click', () => {
-            if (!userId || !userName) { alert('先に名前を決定してください。'); return; }
+            if (!userId || !userName) { console.error('先に名前を決定してください。'); return; }
             const targetGameId = gameIdInput.value.trim().toUpperCase();
-            if (targetGameId.length === 0) { alert('参加するゲームIDを入力してください。'); return; }
+            if (targetGameId.length === 0) { console.error('参加するゲームIDを入力してください。'); return; }
             joinGame(targetGameId);
         });
 
@@ -404,10 +406,11 @@
                     localStorage.setItem('werewolf_game_id', gameId);
                     startListening(gameRef);
                 });
-                alert(`ゲーム ${targetGameId} に参加しました。`);
+                // NOTE: iframe環境ではalert()は非推奨
+                console.log(`ゲーム ${targetGameId} に参加しました。`);
             } catch (e) {
                 console.error("ゲーム参加エラー:", e.message);
-                alert(`ゲーム参加エラー: ${e.message}`);
+                // NOTE: iframe環境ではalert()は非推奨
             }
         }
 
@@ -553,7 +556,10 @@
             let actionType = null;
             let title = '';
 
-            if (gameState.status === 'day' && gameState.phase === 'vote') {
+            // 1日目の昼は投票できないようにする
+            const isFirstDayVote = (gameState.dayCount === 1 && gameState.status === 'day' && gameState.phase === 'vote');
+
+            if (gameState.status === 'day' && gameState.phase === 'vote' && !isFirstDayVote) {
                 actionType = 'vote';
                 title = '処刑対象に投票してください';
             } else if (gameState.status === 'night' && gameState.phase === 'action') {
@@ -564,6 +570,12 @@
                     actionType = 'seer_predict';
                     title = '占う対象を選んでください';
                 }
+            }
+            
+            if (isFirstDayVote) {
+                 actionArea.classList.remove('hidden');
+                 actionTitle.textContent = '1日目の昼は投票できません。GMの指示を待ってください。';
+                 return;
             }
 
             if (!actionType) return;
@@ -639,6 +651,14 @@
 
                     let updateData = {};
                     let systemMessageText = '';
+                    
+                    // 1日目の昼は投票アクションを受け付けない
+                    const isFirstDayVoteAttempt = (currentData.dayCount === 1 && currentData.status === 'day' && actionType === 'vote');
+                    if (isFirstDayVoteAttempt) {
+                        console.log("1日目の昼は投票できません。");
+                        return;
+                    }
+
 
                     if (actionType === 'vote' && currentData.status === 'day' && currentData.phase === 'vote') {
                         // 投票ロジック (ここではシンプルに最終ターゲットだけ記録)
@@ -654,7 +674,8 @@
                         // 占い師の占い (結果はプライベートに表示)
                         const targetPlayer = currentData.players[targetId];
                         const result = targetPlayer.role === 'werewolf' ? '人狼' : '人狼ではない';
-                        alert(`${targetPlayer.name} を占いました。結果: ${result} でした。`);
+                        // NOTE: iframe環境ではalert()は非推奨ですが、ここでは簡易通知として使用します
+                        console.log(`${targetPlayer.name} を占いました。結果: ${result} でした。`);
                         systemMessageText = `${player.name} (占い師) が占いを完了しました。`;
                         // Firestoreへの書き込みは不要 (結果はクライアントに通知するのみ)
                         return; // 占い師はFirestoreを更新しないためここで終了
@@ -676,10 +697,11 @@
                         messages: arrayUnion(newMessage)
                     });
                 });
-                alert('アクションが完了しました。');
+                // NOTE: iframe環境ではalert()は非推奨
+                console.log('アクションが完了しました。');
             } catch (e) {
                 console.error("アクション実行エラー:", e.message);
-                alert(`アクション実行エラー: ${e.message}`);
+                // NOTE: iframe環境ではalert()は非推奨
             }
         }
 
@@ -714,7 +736,7 @@
         startGameButton.addEventListener('click', async () => {
             if (gameState.status !== 'lobby' || gameState.hostId !== userId) return;
             const playerCount = Object.keys(gameState.players).length;
-            if (playerCount < 3) { alert('ゲーム開始には最低3人のプレイヤーが必要です。'); return; }
+            if (playerCount < 3) { console.error('ゲーム開始には最低3人のプレイヤーが必要です。'); return; }
 
             const newPlayers = assignRoles(gameState.players);
 
@@ -756,9 +778,16 @@
                 nextStatus = 'finished';
                 systemMessageText = `ゲーム終了！${winner === 'werewolves' ? '人狼' : '村人'}陣営の勝利です！`;
             } else if (gameState.status === 'day' && gameState.phase === 'discussion') {
-                // 昼 -> 投票
-                nextPhase = 'vote';
-                systemMessageText = '議論終了！処刑対象に投票してください。';
+                if (gameState.dayCount === 1) {
+                    // 1日目の議論 -> 夜
+                    nextStatus = 'night';
+                    nextPhase = 'action';
+                    systemMessageText = '1日目の昼は投票なしで終了します。夜になりました。能力者は行動を選択してください。';
+                } else {
+                    // 2日目以降の議論 -> 投票
+                    nextPhase = 'vote';
+                    systemMessageText = '議論終了！処刑対象に投票してください。';
+                }
             } else if (gameState.status === 'day' && gameState.phase === 'vote') {
                 // 投票 -> 投票結果発表
                 nextPhase = 'result';
@@ -779,23 +808,33 @@
                 } else {
                     nextStatus = 'night';
                     nextPhase = 'action';
+                    nextDayCount++; // 日数をインクリメント
                     systemMessageText = `${nextDayCount}日目の夜になりました。能力者は行動を選択してください。`;
                 }
             } else if (gameState.status === 'night' && gameState.phase === 'action') {
-                // 夜の行動 -> 翌日の結果発表
+                // 夜の行動 -> 翌日の議論
                 nextStatus = 'day';
-                nextPhase = 'result';
-                nextDayCount++;
+                nextPhase = 'discussion';
                 // TODO: 実際の夜の行動結果を反映 (ここでは lastActionTarget を襲撃対象と仮定)
                 eliminatedId = gameState.lastActionTarget;
                 if (eliminatedId && newPlayers[eliminatedId]) {
                     newPlayers[eliminatedId].isAlive = false;
-                    systemMessageText = `${nextDayCount}日目の朝です。夜の間に ${newPlayers[eliminatedId].name} が犠牲になりました。`;
+                    systemMessageText = `${nextDayCount + 1}日目の朝です。夜の間に ${newPlayers[eliminatedId].name} が犠牲になりました。`;
                 } else {
-                    systemMessageText = `${nextDayCount}日目の朝です。犠牲者はいませんでした。`;
+                    systemMessageText = `${nextDayCount + 1}日目の朝です。犠牲者はいませんでした。`;
                 }
-            } else if (gameState.status === 'night' && gameState.phase === 'result') {
-                 // 夜の結果発表 -> 昼の議論 (ここでは結果発表は昼に統合されるため、このフェーズはない)
+                
+                // 夜の行動後に再度勝利判定
+                winner = checkWinCondition(newPlayers);
+                if (winner) {
+                    nextStatus = 'finished';
+                    systemMessageText = `ゲーム終了！${winner === 'werewolves' ? '人狼' : '村人'}陣営の勝利です！`;
+                } else if (nextStatus === 'day') {
+                    // 夜の行動の結果発表は、そのまま次の日の議論フェーズで行われると見なす
+                    systemMessageText += '議論を開始してください。';
+                }
+                
+
             } else {
                 return; // 想定外の遷移
             }
@@ -849,14 +888,15 @@
 
             try {
                 await deleteDoc(getGameDocRef(gameId));
-                alert('ゲームをリセットしました。');
+                // NOTE: iframe環境ではalert()は非推奨
+                console.log('ゲームをリセットしました。');
                 gameId = '';
                 localStorage.removeItem('werewolf_game_id');
                 if (unsubscribe) unsubscribe();
                 resetUI();
             } catch (e) {
                 console.error("ゲームリセットエラー:", e);
-                alert('ゲームリセット中にエラーが発生しました。');
+                // NOTE: iframe環境ではalert()は非推奨
             }
         });
 
