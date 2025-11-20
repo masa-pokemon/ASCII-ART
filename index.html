@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ゼイジャックエストI - TileSet Ver.</title>
+    <title>ゼイジャックエストI - Skill Update</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -15,7 +15,7 @@
             overflow: hidden;
         }
         #gameCanvas {
-            image-rendering: pixelated; /* ドット絵をくっきり表示 */
+            image-rendering: pixelated;
             border: 4px solid #3b82f6;
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
             margin: 0 auto;
@@ -47,9 +47,9 @@
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 200px;
+            width: 220px;
             height: auto;
-            min-height: 100px;
+            min-height: 120px;
             z-index: 10;
         }
         .menu-item {
@@ -58,10 +58,15 @@
             transition: background-color 0.1s;
             border-radius: 4px;
             margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
         }
         .menu-item.selected {
             background-color: #3b82f6;
             color: #0f172a;
+        }
+        .menu-item.disabled {
+            color: #64748b;
         }
         .slot-button {
             display: block;
@@ -83,15 +88,6 @@
         .slot-button.empty {
             color: #64748b;
             font-style: italic;
-        }
-        .slot-info {
-            font-size: 0.9em;
-            color: #cbd5e1;
-        }
-        .slot-date {
-            font-size: 0.75em;
-            color: #94a3b8;
-            float: right;
         }
     </style>
 </head>
@@ -134,8 +130,8 @@
 
                 <!-- バトルUI要素: コマンドメニュー -->
                 <div id="combat-menu-box" class="rpg-window p-3 hidden">
-                    <h3 class="text-yellow-300 text-lg mb-2 border-b border-gray-700 pb-1">コマンド</h3>
-                    <div id="commandList" class="space-y-1">
+                    <h3 id="menuTitle" class="text-yellow-300 text-lg mb-2 border-b border-gray-700 pb-1">コマンド</h3>
+                    <div id="commandList" class="space-y-1 text-sm">
                         <!-- コマンドアイテムはJSで挿入されます -->
                     </div>
                 </div>
@@ -147,8 +143,11 @@
                     <h2 class="text-xl text-yellow-300 border-b border-gray-500 pb-1 mb-2">現在の状況</h2>
                     <p id="playerJob" class="text-sm">職業: --</p>
                     <p id="playerLevel" class="text-sm">Lv: --</p>
-                    <p id="playerHP" class="text-sm">HP: --</p>
-                    <p id="statusMessage" class="text-sm text-green-400 mt-2 h-10 overflow-hidden">システム起動中...</p>
+                    <div class="mt-2 space-y-1">
+                        <p class="text-sm">HP: <span id="playerHP" class="text-green-400">--</span></p>
+                        <p class="text-sm">MP: <span id="playerMP" class="text-blue-400">--</span></p>
+                    </div>
+                    <p id="statusMessage" class="text-sm text-gray-400 mt-2 h-10 overflow-hidden">システム起動中...</p>
                 </div>
                 
                 <div class="rpg-window p-4">
@@ -211,49 +210,34 @@
         // --- ゲーム定数と変数 ---
         const TILE_SIZE = 32;
         const CANVAS_SIZE = 512;
-        const MAP_COLS = CANVAS_SIZE / TILE_SIZE; // 16
-        const MAP_ROWS = CANVAS_SIZE / TILE_SIZE; // 16
+        const MAP_COLS = CANVAS_SIZE / TILE_SIZE; 
+        const MAP_ROWS = CANVAS_SIZE / TILE_SIZE; 
         
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // タイルID定義
         const TILE_GROUND = 0; 
-        const TILE_WALL = 14; 
-        const TILE_GRASS = 13; 
+        const TILE_WALL = 1; 
+        const TILE_GRASS = 2; 
         const TILE_START = 9; 
 
-        // --- タイルセット画像生成 ---
-        // 実際のBase64画像がある場合は、以下の関数を使わず、直接文字列を代入してください。
+        // タイルセット画像（ダミー生成）
         function createDummyTileset() {
             const c = document.createElement('canvas');
-            c.width = 320; // 32px * 10 tiles (0 to 9)
+            c.width = 320;
             c.height = 32;
             const cx = c.getContext('2d');
-
-            // Tile 0: Ground (Dark Blue Circuit)
             cx.fillStyle = '#1e293b'; cx.fillRect(0, 0, 32, 32);
             cx.strokeStyle = '#334155'; cx.lineWidth = 2; cx.strokeRect(2, 2, 28, 28);
-            
-            // Tile 1: Wall (Slate/Firewall)
             cx.fillStyle = '#475569'; cx.fillRect(32, 0, 32, 32);
             cx.fillStyle = '#64748b'; cx.fillRect(36, 4, 24, 24);
-            
-            // Tile 2: Grass (Data Stream)
             cx.fillStyle = '#0f766e'; cx.fillRect(64, 0, 32, 32);
-            cx.fillStyle = '#2dd4bf'; // bits
-            cx.fillRect(68, 8, 4, 4); cx.fillRect(80, 20, 4, 4); cx.fillRect(88, 6, 2, 8);
-            
-            // Tile 9: Start (S mark)
+            cx.fillStyle = '#2dd4bf'; cx.fillRect(68, 8, 4, 4); cx.fillRect(80, 20, 4, 4); cx.fillRect(88, 6, 2, 8);
             cx.fillStyle = '#1e293b'; cx.fillRect(288, 0, 32, 32);
             cx.fillStyle = '#3b82f6'; cx.font = 'bold 20px monospace'; cx.fillText('S', 296, 24);
-
             return c.toDataURL();
         }
-
-        // タイルセットBase64 (ここにお持ちのBase64画像を入れてもOK)
         const TILE_ASSET_BASE64 = 'data:image/png;base64,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'; 
-
         let tilesetImage = new Image();
         let isTilesetLoaded = false;
 
@@ -277,25 +261,53 @@
             [ 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14],
         ];
 
+        // --- 職業とスキル定義 ---
         const JOB_BASE_STATS = {
             'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5, desc: '攻守のバランスが良い。脆弱性診断が得意。' },
-            'セキュリティエンジニア': { str: 4, mag: 12, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。論理防御は低いが火力は高い。' },
-            'ファイアウォール': { str: 12, mag: 2, vit: 12, spd: 4, expRate: 1.1, desc: '物理遮断特化。圧倒的な防御力でパケットを防ぐ。' },
-            'フルスタック賢者': { str: 5, mag: 15, vit: 7, spd: 7, expRate: 1.4, desc: '全レイヤー(魔法)大UP。あらゆるプロトコルに精通。' },
-            'デバッガー': { str: 7, mag: 7, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)を手なずける。成長は遅いが、修正時のインパクト大。' },
+            'セキュリティエンジニア': { str: 4, mag: 14, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。MPが高い。' },
+            'ファイアウォール': { str: 12, mag: 2, vit: 14, spd: 4, expRate: 1.1, desc: '物理遮断特化。圧倒的な防御力とHP。' },
+            'フルスタック賢者': { str: 6, mag: 12, vit: 7, spd: 7, expRate: 1.4, desc: '全レイヤー(魔法)大UP。回復も攻撃も可能。' },
+            'デバッガー': { str: 8, mag: 6, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)キラー。特殊なデバッグコマンドを使う。' },
         };
 
-        const COMBAT_COMMANDS = ['パケット攻撃', 'スキル', '修復アイテム', 'ログアウト'];
+        // スキルデータ (type: 'dmg'=ダメージ, 'heal'=回復, 'buff'=強化)
+        // power: 攻撃なら倍率、回復なら最大HP割合、バフなら上昇量
+        const SKILL_DATA = {
+            'ホワイトハッカー': [
+                { name: 'クイックスキャン', mp: 4, level: 1, type: 'dmg', power: 1.3, desc: '弱点を突く高速攻撃' },
+                { name: '緊急パッチ', mp: 6, level: 3, type: 'heal', power: 0.4, desc: 'HPを中回復' }
+            ],
+            'セキュリティエンジニア': [
+                { name: 'DDoS砲', mp: 8, level: 1, type: 'dmg', power: 1.8, desc: '高負荷パケットで大ダメージ' },
+                { name: 'エクスプロイト', mp: 12, level: 3, type: 'dmg', power: 2.5, desc: '脆弱性を突く特大ダメージ' }
+            ],
+            'ファイアウォール': [
+                { name: 'シールドバッシュ', mp: 5, level: 1, type: 'dmg', power: 1.2, desc: '防御力を攻撃力に変えて攻撃' },
+                { name: '鉄壁の守り', mp: 8, level: 3, type: 'buff', power: 1.5, desc: '一時的に防御力UP(未実装)' } // 今回は簡易的に小回復扱い
+            ],
+            'フルスタック賢者': [
+                { name: 'ヒールコード', mp: 5, level: 1, type: 'heal', power: 0.5, desc: 'HPを大幅に回復' },
+                { name: 'sudo rm -rf', mp: 15, level: 5, type: 'dmg', power: 3.0, desc: '究極の削除コマンド(超ダメージ)' }
+            ],
+            'デバッガー': [
+                { name: 'バグ潰し', mp: 4, level: 1, type: 'dmg', power: 1.4, desc: '確実にダメージを与える' },
+                { name: '強制終了', mp: 10, level: 4, type: 'dmg', power: 2.2, desc: 'プロセスをキルする強力な一撃' }
+            ]
+        };
+
+        const COMBAT_COMMANDS = ['攻撃', 'スキル', '回復', '逃げる'];
 
         const INITIAL_GAME_STATE = {
             x: 0, y: 0, level: 1, job: '', exp: 0,
             maxHP: 50, currentHP: 50,
+            maxMP: 20, currentMP: 20, // MP追加
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
             pikmonParty: [], isJobSelected: false,
             eventFlags: {},
             mode: 'OVERWORLD',
             currentEnemy: null,
             selectedCommand: 0,
+            subMode: 'MAIN', // MAIN or SKILL
             combatLock: false,
         };
 
@@ -307,15 +319,8 @@
         // --- 描画システム ---
         function drawTile(x, y, type) {
             if (isTilesetLoaded) {
-                // タイルIDに基づいて画像を切り出し描画
-                // ソースX座標 = type * 32
-                ctx.drawImage(
-                    tilesetImage,
-                    type * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, // Source
-                    x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE // Dest
-                );
+                ctx.drawImage(tilesetImage, type * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
-                // フォールバック描画
                 ctx.fillStyle = type === 1 ? '#475569' : '#1e293b';
                 ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
@@ -325,11 +330,7 @@
             const px = gameState.x * TILE_SIZE;
             const py = gameState.y * TILE_SIZE;
             ctx.fillStyle = '#facc15'; 
-            ctx.beginPath();
-            ctx.moveTo(px + 16, py + 4);
-            ctx.lineTo(px + 28, py + 28);
-            ctx.lineTo(px + 4, py + 28);
-            ctx.fill();
+            ctx.beginPath(); ctx.moveTo(px + 16, py + 4); ctx.lineTo(px + 28, py + 28); ctx.lineTo(px + 4, py + 28); ctx.fill();
         }
 
         function drawMap() {
@@ -342,76 +343,48 @@
 
         function drawBattleScreen() {
             const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_SIZE);
-            gradient.addColorStop(0, '#0f172a');
-            gradient.addColorStop(1, '#1e1b4b');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            gradient.addColorStop(0, '#0f172a'); gradient.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = gradient; ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)'; ctx.lineWidth = 1;
             for(let i = 0; i < CANVAS_SIZE; i+=40) {
                 ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CANVAS_SIZE, i); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, CANVAS_SIZE); ctx.stroke();
             }
 
             if (gameState.currentEnemy) {
-                const cx = CANVAS_SIZE / 2;
-                const cy = CANVAS_SIZE / 3;
-                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : 
-                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
+                const cx = CANVAS_SIZE / 2; const cy = CANVAS_SIZE / 3;
+                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
                 
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.beginPath();
-                ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2); ctx.fill();
 
-                ctx.fillStyle = enemyColor;
-                ctx.beginPath();
+                ctx.fillStyle = enemyColor; ctx.beginPath();
                 if (gameState.currentEnemy.isBoss) {
-                    ctx.moveTo(cx, cy - 80);
-                    ctx.lineTo(cx + 60, cy);
-                    ctx.lineTo(cx + 40, cy + 80);
-                    ctx.lineTo(cx - 40, cy + 80);
-                    ctx.lineTo(cx - 60, cy);
+                    ctx.moveTo(cx, cy - 80); ctx.lineTo(cx + 60, cy); ctx.lineTo(cx + 40, cy + 80); ctx.lineTo(cx - 40, cy + 80); ctx.lineTo(cx - 60, cy);
                 } else {
-                    ctx.moveTo(cx, cy - 50);
-                    ctx.lineTo(cx + 40, cy);
-                    ctx.lineTo(cx + 20, cy + 60);
-                    ctx.lineTo(cx - 20, cy + 60);
-                    ctx.lineTo(cx - 40, cy);
+                    ctx.moveTo(cx, cy - 50); ctx.lineTo(cx + 40, cy); ctx.lineTo(cx + 20, cy + 60); ctx.lineTo(cx - 20, cy + 60); ctx.lineTo(cx - 40, cy);
                 }
-                ctx.closePath();
-                ctx.fill();
+                ctx.closePath(); ctx.fill();
                 
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(cx - 20, cy - 10, 10, 10);
-                ctx.fillRect(cx + 10, cy - 10, 10, 10);
-
-                ctx.font = '20px DotGothic16';
-                ctx.fillStyle = '#fef08a';
-                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff'; ctx.fillRect(cx - 20, cy - 10, 10, 10); ctx.fillRect(cx + 10, cy - 10, 10, 10);
+                ctx.font = '20px DotGothic16'; ctx.fillStyle = '#fef08a'; ctx.textAlign = 'center';
                 ctx.fillText(gameState.currentEnemy.name, cx, cy + 120);
             }
         }
 
         // --- ゲームループ ---
         function initGame() {
-            // 画像読み込み
             tilesetImage.src = TILE_ASSET_BASE64;
-            tilesetImage.onload = () => {
-                isTilesetLoaded = true;
-            };
+            tilesetImage.onload = () => { isTilesetLoaded = true; };
 
             let startFound = false;
             for (let y = 0; y < MAP_ROWS; y++) {
                 for (let x = 0; x < MAP_COLS; x++) {
                     if (gameMap[y][x] === TILE_START) {
                         if (gameState.x === 0 && gameState.y === 0) {
-                            gameState.x = x;
-                            gameState.y = y;
+                            gameState.x = x; gameState.y = y;
                         }
-                        startFound = true;
-                        break;
+                        startFound = true; break;
                     }
                 }
                 if (startFound) break;
@@ -429,28 +402,27 @@
 
         function gameLoop() {
             ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-            
             if (gameState.mode === 'OVERWORLD') {
-                drawMap();
-                drawPlayer();
+                drawMap(); drawPlayer();
             } else if (gameState.mode === 'COMBAT') {
                 drawBattleScreen();
                 document.getElementById('enemy-status-box').classList.remove('hidden');
                 document.getElementById('combat-menu-box').classList.remove('hidden');
-                renderCombatMenu();
+                
+                // モードに応じてメニュー描画を切り替え
+                if (gameState.subMode === 'MAIN') {
+                    renderCombatMenu();
+                } else if (gameState.subMode === 'SKILL') {
+                    renderSkillMenu();
+                }
             }
-
             updateStatusDisplay();
-            
-            if (isGameLoopRunning && !gameState.isMenuOpen) {
-                requestAnimationFrame(gameLoop);
-            }
+            if (isGameLoopRunning && !gameState.isMenuOpen) requestAnimationFrame(gameLoop);
         }
 
-        // --- 移動とイベント ---
+        // --- 移動 ---
         const MOVEMENT_COOLDOWN = 150; 
         let lastMoveTime = 0;
-
         function attemptMove(dx, dy) {
             if (!gameState.isJobSelected || gameState.isMenuOpen || gameState.mode === 'COMBAT') {
                 if (!gameState.isJobSelected && !gameState.isMenuOpen) showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 2000);
@@ -462,16 +434,12 @@
 
             const nextX = (gameState.x + dx + MAP_COLS) % MAP_COLS;
             const nextY = (gameState.y + dy + MAP_ROWS) % MAP_ROWS;
-
             const targetTile = gameMap[nextY][nextX];
 
             if (targetTile !== TILE_WALL) {
-                gameState.x = nextX; 
-                gameState.y = nextY;
+                gameState.x = nextX; gameState.y = nextY;
                 if (!checkStoryEvent(nextX, nextY)) {
-                     if (targetTile === TILE_GRASS) {
-                        checkEncounter();
-                    }
+                     if (targetTile === TILE_GRASS) checkEncounter();
                 }
             }
         }
@@ -481,13 +449,12 @@
         const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
 
         function checkEncounter() {
-            if (Math.random() < 0.15 && !gameState.combatLock) { 
-                initCombat();
-            }
+            if (Math.random() < 0.15 && !gameState.combatLock) initCombat();
         }
 
         function initCombat(bossData = null) {
             gameState.mode = 'COMBAT';
+            gameState.subMode = 'MAIN'; // メインメニューから開始
             gameState.selectedCommand = 0;
             gameState.combatLock = false;
 
@@ -496,20 +463,11 @@
                 showMessage(`警告: ${bossData.name} が立ちはだかった！`, 4000);
             } else {
                 const isZeiJack = Math.random() > 0.4;
-                const enemyName = isZeiJack 
-                    ? ZEIJACK_NAMES[Math.floor(Math.random() * ZEIJACK_NAMES.length)]
-                    : PROMON_NAMES[Math.floor(Math.random() * PROMON_NAMES.length)];
-                
+                const enemyName = isZeiJack ? ZEIJACK_NAMES[Math.floor(Math.random() * ZEIJACK_NAMES.length)] : PROMON_NAMES[Math.floor(Math.random() * PROMON_NAMES.length)];
                 const enemyLevel = Math.max(1, gameState.level + Math.floor(Math.random() * 3) - 1);
                 const baseHp = 25 + enemyLevel * 8;
-
                 gameState.currentEnemy = {
-                    name: enemyName,
-                    maxHP: baseHp,
-                    currentHP: baseHp,
-                    level: enemyLevel,
-                    type: isZeiJack ? 'ZeiJack' : 'Promon',
-                    isBoss: false
+                    name: enemyName, maxHP: baseHp, currentHP: baseHp, level: enemyLevel, type: isZeiJack ? 'ZeiJack' : 'Promon', isBoss: false
                 };
                 showMessage(isZeiJack ? "不正なプロセスを検知！" : "中立なデータと遭遇。", 3000);
             }
@@ -521,7 +479,6 @@
             gameState.mode = 'OVERWORLD';
             gameState.currentEnemy = null;
             gameState.combatLock = false;
-            
             document.getElementById('enemy-status-box').classList.add('hidden');
             document.getElementById('combat-menu-box').classList.add('hidden');
 
@@ -544,30 +501,48 @@
 
         function executeCommand(command) {
             if (gameState.combatLock) return;
-            gameState.combatLock = true;
             
+            if (gameState.subMode === 'SKILL') {
+                // スキル選択モード時の処理
+                if (command === '戻る') {
+                    gameState.subMode = 'MAIN';
+                    gameState.selectedCommand = 0;
+                    return;
+                }
+                // スキルオブジェクトが渡された場合
+                if (typeof command === 'object') {
+                     performSkill(command);
+                }
+                return;
+            }
+
+            // メインコマンド処理
             switch (command) {
-                case 'パケット攻撃': performAttack(); break;
-                case 'スキル':
-                    showMessage("スキルモジュールは未実装です。", 1500);
-                    gameState.combatLock = false;
+                case '攻撃': 
+                    gameState.combatLock = true;
+                    performAttack(); 
                     break;
-                case '修復アイテム':
+                case 'スキル':
+                    gameState.subMode = 'SKILL';
+                    gameState.selectedCommand = 0;
+                    break;
+                case '回復':
+                    gameState.combatLock = true;
                     if (gameState.currentHP < gameState.maxHP) {
                         const heal = Math.floor(gameState.maxHP * 0.3);
                         gameState.currentHP = Math.min(gameState.maxHP, gameState.currentHP + heal);
-                        showMessage(`パッチを適用。HPが${heal}回復した。`, 2000);
+                        showMessage(`パッチ適用。HPが${heal}回復。`, 2000);
                         setTimeout(enemyTurn, 2500);
                     } else {
                         showMessage("システムは正常です。", 1500);
                         gameState.combatLock = false;
                     }
                     break;
-                case 'ログアウト':
+                case '逃げる':
                     if (gameState.currentEnemy.isBoss) {
                         showMessage("管理者権限によりログアウトできません！", 2000);
-                        setTimeout(() => gameState.combatLock = false, 2000);
                     } else {
+                        gameState.combatLock = true;
                         const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
                         if (Math.random() < chance + 0.5) {
                             setTimeout(() => endCombat('ESCAPE'), 1000);
@@ -583,30 +558,59 @@
         function performAttack() {
             const crit = Math.random() < 0.1 ? 2 : 1;
             const damage = Math.floor(Math.max(1, gameState.stats.str * 1.5 - (gameState.currentEnemy.level * 0.5)) * crit);
-            
             showMessage(`攻撃パケット送信... ${crit > 1 ? "クリティカル！" : ""} ${gameState.currentEnemy.name}に${damage}ダメージ！`, 3000);
             gameState.currentEnemy.currentHP -= damage;
-            
             if (gameState.currentEnemy.currentHP <= 0) {
-                gameState.currentEnemy.currentHP = 0;
-                setTimeout(() => endCombat('WIN'), 3500);
+                gameState.currentEnemy.currentHP = 0; setTimeout(() => endCombat('WIN'), 3500);
             } else {
                 setTimeout(enemyTurn, 4000);
+            }
+        }
+
+        function performSkill(skill) {
+            if (gameState.currentMP < skill.mp) {
+                showMessage("メモリ(MP)が足りません！", 1500);
+                return;
+            }
+            
+            gameState.combatLock = true;
+            gameState.currentMP -= skill.mp;
+            
+            if (skill.type === 'heal') {
+                const heal = Math.floor(gameState.maxHP * skill.power);
+                gameState.currentHP = Math.min(gameState.maxHP, gameState.currentHP + heal);
+                showMessage(`${skill.name}！ HPが${heal}回復した。`, 2500);
+                setTimeout(enemyTurn, 3000);
+            } else {
+                // 攻撃系スキル
+                const baseDmg = skill.type === 'dmg' && skill.name.includes('物理') ? gameState.stats.str : gameState.stats.mag;
+                const damage = Math.floor(Math.max(1, baseDmg * skill.power));
+                
+                showMessage(`${skill.name}発動！ ${gameState.currentEnemy.name}に${damage}の大ダメージ！`, 3000);
+                gameState.currentEnemy.currentHP -= damage;
+                
+                if (gameState.currentEnemy.currentHP <= 0) {
+                    gameState.currentEnemy.currentHP = 0; setTimeout(() => endCombat('WIN'), 3500);
+                } else {
+                    setTimeout(enemyTurn, 4000);
+                }
             }
         }
 
         function enemyTurn() {
             const enemy = gameState.currentEnemy;
             const damage = Math.floor(Math.max(0, enemy.level * 2 + 5 - gameState.stats.vit / 2));
-            
             gameState.currentHP -= damage;
             showMessage(`${enemy.name}の反撃！ ${damage}のダメージを受けた！`, 3000);
-
             if (gameState.currentHP <= 0) {
-                gameState.currentHP = 0;
-                setTimeout(() => endCombat('LOSE'), 3500);
+                gameState.currentHP = 0; setTimeout(() => endCombat('LOSE'), 3500);
             } else {
-                setTimeout(() => gameState.combatLock = false, 3500);
+                setTimeout(() => {
+                    gameState.combatLock = false;
+                    // ターン終了時にメインメニューに戻す
+                    gameState.subMode = 'MAIN';
+                    gameState.selectedCommand = 0;
+                }, 3500);
             }
         }
 
@@ -621,38 +625,35 @@
                 gameState.stats.mag += Math.ceil(job.mag / 3);
                 gameState.stats.vit += Math.ceil(job.vit / 3);
                 gameState.stats.spd += Math.ceil(job.spd / 3);
+                
                 gameState.maxHP += 10 + Math.floor(job.vit / 2);
+                gameState.maxMP += 5 + Math.floor(job.mag / 3); // MP上昇
                 gameState.currentHP = gameState.maxHP;
+                gameState.currentMP = gameState.maxMP;
+
                 showMessage(`レベルアップ！ Lv${gameState.level}になり、システム性能が向上しました。`, 5000);
             }
         }
         
+        // --- イベント ---
         function checkStoryEvent(x, y) {
             if (gameMap[y][x] === TILE_START && !gameState.eventFlags['START_TUTORIAL']) {
                 gameState.eventFlags['START_TUTORIAL'] = true;
-                showMessage("【システムログ】認証完了。ネットワーク内の脆弱性を特定し、パッチを適用せよ。右下の『ルートディレクトリ』を目指してください。", 8000);
-                return true;
+                showMessage("【ログ】認証完了。右下の『ルートディレクトリ』を目指し、脆弱性を修復せよ。", 8000); return true;
             }
             if (x === 8 && y === 8 && !gameState.eventFlags['MID_WARNING']) {
                 gameState.eventFlags['MID_WARNING'] = true;
-                showMessage("【警告】このセクターはデータ破損が激しい。DoS攻撃の痕跡があります。慎重に進んでください。", 6000);
-                return true;
+                showMessage("【警告】DoS攻撃の痕跡あり。慎重に進んでください。", 6000); return true;
             }
             if (x === 3 && y === 12 && !gameState.eventFlags['SECRET_CACHE']) {
-                gameState.eventFlags['SECRET_CACHE'] = true;
-                gameState.exp += 50;
-                showMessage("【発見】古いキャッシュデータを発見。「password123」...脆弱なパスワードだ。経験値+50", 6000);
-                return true;
+                gameState.eventFlags['SECRET_CACHE'] = true; gameState.exp += 50;
+                showMessage("【発見】古いキャッシュ「password123」を発見。経験値+50", 6000); return true;
             }
             if (x === 14 && y === 14) {
                 if (!gameState.eventFlags['BOSS_DEFEATED']) {
-                    initCombat({
-                        name: '魔王エクスプロイト', maxHP: 300, currentHP: 300, level: 20, type: 'ZeiJack', isBoss: true
-                    });
-                    return true;
+                    initCombat({ name: '魔王エクスプロイト', maxHP: 300, currentHP: 300, level: 20, type: 'ZeiJack', isBoss: true }); return true;
                 } else {
-                    showMessage("ここは浄化されたルートディレクトリだ。平和なパケットが流れている。", 4000);
-                    return true;
+                    showMessage("ここは浄化されたルートディレクトリだ。平和なパケットが流れている。", 4000); return true;
                 }
             }
             return false;
@@ -665,13 +666,9 @@
             p.textContent = text;
             box.classList.remove('hidden');
             
-            if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) {
-                p.className = "text-lg leading-relaxed text-red-300";
-            } else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) {
-                p.className = "text-lg leading-relaxed text-yellow-300";
-            } else {
-                p.className = "text-lg leading-relaxed text-green-300";
-            }
+            if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) p.className = "text-lg leading-relaxed text-red-300";
+            else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) p.className = "text-lg leading-relaxed text-yellow-300";
+            else p.className = "text-lg leading-relaxed text-green-300";
             
             messageTimer = setTimeout(() => box.classList.add('hidden'), duration);
         }
@@ -679,7 +676,8 @@
         function updateStatusDisplay() {
             document.getElementById('playerJob').textContent = `${gameState.job || '未定義'}`;
             document.getElementById('playerLevel').textContent = `Lv: ${gameState.level}`;
-            document.getElementById('playerHP').textContent = `HP: ${gameState.currentHP} / ${gameState.maxHP}`;
+            document.getElementById('playerHP').textContent = `${gameState.currentHP} / ${gameState.maxHP}`;
+            document.getElementById('playerMP').textContent = `${gameState.currentMP} / ${gameState.maxMP}`;
             
             if (gameState.mode === 'COMBAT' && gameState.currentEnemy) {
                 const enemy = gameState.currentEnemy;
@@ -690,7 +688,7 @@
 
             const statsText = `
 Lv: ${gameState.level} (${gameState.job})
-HP: ${gameState.currentHP}/${gameState.maxHP}
+HP: ${gameState.currentHP}/${gameState.maxHP}  MP: ${gameState.currentMP}/${gameState.maxMP}
 EXP: ${gameState.exp}
 STR: ${gameState.stats.str} | MAG: ${gameState.stats.mag}
 VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
@@ -703,6 +701,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
         }
 
         function renderCombatMenu() {
+            document.getElementById('menuTitle').textContent = 'コマンド';
             const list = document.getElementById('commandList');
             list.innerHTML = '';
             COMBAT_COMMANDS.forEach((cmd, idx) => {
@@ -710,6 +709,34 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 div.className = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
                 div.textContent = cmd;
                 div.onclick = () => executeCommand(cmd);
+                list.appendChild(div);
+            });
+        }
+
+        function renderSkillMenu() {
+            document.getElementById('menuTitle').textContent = 'スキル選択';
+            const list = document.getElementById('commandList');
+            list.innerHTML = '';
+
+            // 習得済みスキルを抽出 (レベル条件)
+            const allSkills = SKILL_DATA[gameState.job] || [];
+            const knownSkills = allSkills.filter(s => s.level <= gameState.level);
+
+            // 戻るボタンを含めたリスト
+            const menuItems = [...knownSkills, '戻る'];
+
+            menuItems.forEach((item, idx) => {
+                const div = document.createElement('div');
+                const isSkill = typeof item === 'object';
+                const label = isSkill ? `${item.name} (MP:${item.mp})` : item;
+                
+                // MP不足ならグレーアウト
+                let classes = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
+                if (isSkill && gameState.currentMP < item.mp) classes += ' disabled';
+
+                div.className = classes;
+                div.textContent = label;
+                div.onclick = () => executeCommand(item);
                 list.appendChild(div);
             });
         }
@@ -734,115 +761,74 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             if (gameState.isJobSelected) return;
             gameState.job = jobName;
             gameState.isJobSelected = true;
-            gameState.stats = { ...JOB_BASE_STATS[jobName] };
-            gameState.maxHP = 40 + gameState.stats.vit * 2;
+            const base = JOB_BASE_STATS[jobName];
+            gameState.stats = { ...base };
+            gameState.maxHP = 40 + base.vit * 2;
+            gameState.maxMP = 10 + base.mag * 2; // 初期MP
             gameState.currentHP = gameState.maxHP;
+            gameState.currentMP = gameState.maxMP;
             showMessage(`ロール: ${jobName} をインストールしました。`, 4000);
             updateStatusDisplay();
         }
 
-        // --- Local Storage セーブ/ロードシステム ---
+        // --- Local Storage ---
         const SAVE_KEY_PREFIX = 'zeiJackQuest_save_slot_';
         let currentMenuMode = 'save';
 
         window.openSaveLoadMenu = function(mode) {
             currentMenuMode = mode;
-            const modalTitle = document.getElementById('sl-modal-title');
-            const slotsContainer = document.getElementById('save-slots');
-            
-            modalTitle.textContent = mode === 'save' ? 'セーブするスロットを選択' : 'ロードするデータを選択';
-            slotsContainer.innerHTML = '';
-
+            document.getElementById('sl-modal-title').textContent = mode === 'save' ? 'セーブするスロットを選択' : 'ロードするデータを選択';
+            const container = document.getElementById('save-slots');
+            container.innerHTML = '';
             for (let i = 1; i <= 3; i++) {
                 const key = SAVE_KEY_PREFIX + i;
                 const dataJson = localStorage.getItem(key);
                 const btn = document.createElement('button');
                 btn.className = 'slot-button';
-                
                 if (dataJson) {
                     const data = JSON.parse(dataJson);
-                    const date = new Date(data.timestamp).toLocaleString();
-                    btn.innerHTML = `
-                        <div>Slot ${i} <span class="slot-date">${date}</span></div>
-                        <div class="slot-info">Lv.${data.level} ${data.job || 'No Job'} - HP:${data.currentHP}/${data.maxHP}</div>
-                        <div class="slot-info text-xs text-gray-500">Loc: (${data.x}, ${data.y})</div>
-                    `;
+                    btn.innerHTML = `<div>Slot ${i} <span class="slot-date">${new Date(data.timestamp).toLocaleString()}</span></div><div class="slot-info">Lv.${data.level} ${data.job}</div>`;
                     btn.onclick = () => handleSlotAction(i);
                 } else {
                     btn.innerHTML = `<div>Slot ${i}</div><div class="slot-button empty">No Data</div>`;
-                    if (mode === 'save') {
-                        btn.onclick = () => handleSlotAction(i);
-                    } else {
-                        btn.disabled = true;
-                        btn.style.opacity = '0.5';
-                        btn.style.cursor = 'default';
-                    }
+                    if (mode === 'save') btn.onclick = () => handleSlotAction(i);
+                    else { btn.disabled = true; btn.style.opacity = '0.5'; }
                 }
-                slotsContainer.appendChild(btn);
+                container.appendChild(btn);
             }
-
             document.getElementById('save-load-modal').classList.remove('hidden');
             if(mode === 'save') document.getElementById('menuModal').classList.add('hidden');
         };
 
         window.closeSaveLoadMenu = function() {
             document.getElementById('save-load-modal').classList.add('hidden');
-            if (currentMenuMode === 'save') {
-                document.getElementById('menuModal').classList.remove('hidden');
-            }
+            if (currentMenuMode === 'save') document.getElementById('menuModal').classList.remove('hidden');
         };
 
         function handleSlotAction(slotNum) {
             if (currentMenuMode === 'save') {
-                saveToSlot(slotNum);
+                const saveState = { ...gameState, timestamp: Date.now() };
+                localStorage.setItem(SAVE_KEY_PREFIX + slotNum, JSON.stringify(saveState));
+                showMessage(`スロット${slotNum}にセーブしました。`, 3000);
             } else {
-                loadFromSlot(slotNum);
+                const data = JSON.parse(localStorage.getItem(SAVE_KEY_PREFIX + slotNum));
+                gameState = { ...INITIAL_GAME_STATE, ...data };
+                document.getElementById('title-screen').classList.add('hidden');
+                document.getElementById('main-container').classList.remove('hidden');
+                isGameLoopRunning = true; gameState.isMenuOpen = false;
+                document.getElementById('menuModal').classList.add('hidden');
+                showMessage("ロードしました。", 3000);
+                requestAnimationFrame(gameLoop);
             }
             window.closeSaveLoadMenu();
         }
 
-        function saveToSlot(slotNum) {
-            const saveState = {
-                ...gameState,
-                timestamp: Date.now()
-            };
-            try {
-                localStorage.setItem(SAVE_KEY_PREFIX + slotNum, JSON.stringify(saveState));
-                showMessage(`スロット${slotNum}にセーブしました。`, 3000);
-            } catch (e) {
-                console.error(e);
-                showMessage("セーブに失敗しました（容量不足など）。", 3000);
-            }
-        }
-
-        function loadFromSlot(slotNum) {
-            const dataJson = localStorage.getItem(SAVE_KEY_PREFIX + slotNum);
-            if (dataJson) {
-                const data = JSON.parse(dataJson);
-                gameState = { ...INITIAL_GAME_STATE, ...data };
-                
-                document.getElementById('title-screen').classList.add('hidden');
-                document.getElementById('main-container').classList.remove('hidden');
-                
-                isGameLoopRunning = true;
-                gameState.isMenuOpen = false;
-                document.getElementById('menuModal').classList.add('hidden');
-                
-                showMessage("データをロードしました。", 3000);
-                requestAnimationFrame(gameLoop);
-            }
-        }
-
-        // --- タイトル画面操作 ---
         window.startNewGame = function() {
             gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
             document.getElementById('title-screen').classList.add('hidden');
             document.getElementById('main-container').classList.remove('hidden');
-            
             initGame();
-            setTimeout(() => {
-                showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000);
-            }, 1000);
+            setTimeout(() => showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000), 1000);
         };
 
         window.returnToTitle = function() {
@@ -852,13 +838,11 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
         };
 
         document.addEventListener('keydown', (e) => {
-            if (document.getElementById('save-load-modal').classList.contains('hidden') === false) {
-                if (e.key === 'Escape') window.closeSaveLoadMenu();
-                return;
+            if (!document.getElementById('save-load-modal').classList.contains('hidden')) {
+                if (e.key === 'Escape') window.closeSaveLoadMenu(); return;
             }
             if (gameState.isMenuOpen) {
-                if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') window.closeMenu();
-                return;
+                if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') window.closeMenu(); return;
             }
             
             if (gameState.mode === 'OVERWORLD' && isGameLoopRunning) {
@@ -868,10 +852,30 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 if (e.key === 'ArrowRight') attemptMove(1, 0);
                 if (e.key === 'e' || e.key === 'E') window.openMenu();
             } else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
-                if (e.key === 'ArrowUp') gameState.selectedCommand = Math.max(0, gameState.selectedCommand - 1);
-                if (e.key === 'ArrowDown') gameState.selectedCommand = Math.min(COMBAT_COMMANDS.length - 1, gameState.selectedCommand + 1);
-                if (e.key === 'Enter') executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
-                renderCombatMenu();
+                // バトル中の入力処理
+                const menuLength = gameState.subMode === 'SKILL' 
+                    ? (SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level).length || 0) + 1 // +1 for '戻る'
+                    : COMBAT_COMMANDS.length;
+
+                if (e.key === 'ArrowUp') gameState.selectedCommand = (gameState.selectedCommand - 1 + menuLength) % menuLength;
+                if (e.key === 'ArrowDown') gameState.selectedCommand = (gameState.selectedCommand + 1) % menuLength;
+                
+                if (e.key === 'Enter') {
+                    if (gameState.subMode === 'MAIN') {
+                        executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
+                    } else {
+                        const skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
+                        if (gameState.selectedCommand < skills.length) {
+                            executeCommand(skills[gameState.selectedCommand]);
+                        } else {
+                            executeCommand('戻る');
+                        }
+                    }
+                }
+                
+                // 描画更新
+                if (gameState.subMode === 'MAIN') renderCombatMenu();
+                else renderSkillMenu();
             }
         });
     </script>
