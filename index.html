@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZeiJack Quest II - Debugger Fix</title>
+    <title>ZeiJack Quest II - Monster Expansion</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -294,7 +294,7 @@
 
         // --- スキル・職業定義 ---
         const MASTERY_EXP = 100;
-        const SKILL_EXP_GAIN = 25; 
+        const SKILL_EXP_GAIN = 35; 
 
         const SKILL_DEFINITIONS = {
             // 基本攻撃系
@@ -322,11 +322,18 @@
             'DROP TABLE': { mp: 12, type: 'dmg', power: 2.5, desc: 'DB破壊攻撃', evolution: 'DB完全消去' },
             'DB完全消去': { mp: 24, type: 'dmg', power: 3.5, desc: '全てを無に帰す一撃' },
             '総当たり攻撃': { mp: 5, type: 'dmg', power: 1.3, desc: '連続攻撃' },
-            'なりすまし': { mp: 5, type: 'heal', power: 0.3, desc: '欺いて回復' },
+            'なりすまし': { mp: 5, type: 'heal', power: 0.3, desc: '欺いて回復', evolution: 'ソーシャルエンジニアリング' },
+            'ソーシャルエンジニアリング': { mp: 10, type: 'heal', power: 0.7, desc: '心を掌握して大回復' },
             '再送要求': { mp: 3, type: 'heal', power: 0.2, desc: '小回復' },
             'ボトルネック': { mp: 4, type: 'dmg', power: 1.4, desc: '通信阻害攻撃' },
             'ゼロデイ': { mp: 8, type: 'dmg', power: 1.9, desc: '未知の攻撃', evolution: 'ゼロデイ・エクスプロイト' },
             '権限昇格': { mp: 20, type: 'dmg', power: 3.5, desc: 'Root権限攻撃' },
+            // 新モンスター用スキル
+            '暗号化ロック': { mp: 7, type: 'dmg', power: 1.6, desc: 'データを人質に取る攻撃' },
+            'バックドア': { mp: 6, type: 'buff', power: 1.3, desc: '裏口を作り有利に(小回復)' },
+            '404迷彩': { mp: 5, type: 'buff', power: 1.2, desc: '存在を隠す(小回復)' },
+            'バグ増殖': { mp: 8, type: 'dmg', power: 1.7, desc: 'バグを撒き散らす全体攻撃風' },
+            'クッキー食い': { mp: 6, type: 'heal', power: 0.3, desc: 'データを食べて回復' },
 
             // 上位・合成スキル
             '論理爆弾': { mp: 15, type: 'dmg', power: 2.5, desc: '条件を満たすと爆発する罠' },
@@ -345,6 +352,11 @@
             '迷子のパケット': '再送要求',
             '旧式ルーター': 'ボトルネック',
             '未パッチサーバー': 'ゼロデイ',
+            'ランサムウェア': '暗号化ロック',
+            'トロイの木馬': 'バックドア',
+            '404ゴースト': '404迷彩',
+            'グリッチ・スライム': 'バグ増殖',
+            'クッキー・イーター': 'クッキー食い',
             'カーネル・パニック': '権限昇格',
             '魔王エクスプロイト': '権限昇格'
         };
@@ -534,8 +546,8 @@
         }
 
         // --- バトル & スキルシステム ---
-        const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師'];
-        const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
+        const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師', 'ランサムウェア', 'トロイの木馬', 'ゼロデイ・ハンター', 'ボットネット・コマンダー'];
+        const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー', '404ゴースト', 'クッキー・イーター', 'レガシー・デーモン', 'グリッチ・スライム'];
 
         function initCombat(bossData = null) {
             gameState.mode = 'COMBAT';
@@ -646,11 +658,19 @@
             let newSkillName = null;
             let method = "";
 
+            // 1. 進化 (Evolution) -> 古いスキルを削除して入れ替え
             if (def.evolution) {
                 newSkillName = def.evolution;
                 method = "進化";
+                
+                // 削除処理 (進化の場合は置き換え)
+                const index = gameState.skills.indexOf(skillObj);
+                if (index > -1) {
+                    gameState.skills.splice(index, 1);
+                }
             }
 
+            // 2. 合成 (Synthesis) -> 新スキル追加 (素材は残すか消すか、ここでは残す設定)
             if (!newSkillName) {
                 for (const recipe of SYNTHESIS_RECIPES) {
                     const hasA = gameState.skills.find(s => s.name === recipe.a && s.master);
@@ -713,6 +733,7 @@
                 // --- デバッガーのラーニング処理 ---
                 if (gameState.job === 'デバッガー') {
                     const learnSkillName = ENEMY_LEARN_MAP[enemy.name];
+                    // まだ覚えていない場合のみ
                     const alreadyLearned = gameState.skills.some(s => s.name === learnSkillName);
                     
                     if (learnSkillName && !alreadyLearned) {
