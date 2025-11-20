@@ -3,1168 +3,878 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>オンライン人狼ゲーム</title>
+    <title>ゼイジャックエストI - Security RPG</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+
+        /* ドット絵風のフォントと基本スタイル */
         body {
-            font-family: 'Noto Sans JP', 'Inter', sans-serif;
-            background-color: #0d1117;
-            color: #c9d1d9;
+            font-family: 'DotGothic16', monospace;
+            background-color: #0f172a; /* Cyber World: Dark Slate */
+            color: #e2e8f0; /* Light Text */
+            overflow: hidden; /* スクロール防止 */
+            user-select: none; /* テキスト選択防止 */
         }
-        .container {
-            max-width: 900px;
+        #gameCanvas {
+            image-rendering: pixelated;
+            border: 4px solid #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            margin: 0 auto;
+            background-color: #000;
+            outline: none; /* フォーカス時の枠線を消す */
         }
-        .card {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+        /* RPGメニュー/ウィンドウ風スタイル */
+        .rpg-window {
+            background-color: rgba(30, 41, 59, 0.95);
+            border: 3px solid #60a5fa;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
         }
-        .chat-container {
-            height: 400px;
-            overflow-y: auto;
-            background-color: #010409;
-            border-radius: 0.5rem;
-            padding: 0.5rem;
+        .pixel-button {
+            transition: transform 0.1s;
+            box-shadow: 0 3px #1e40af;
         }
-        .chat-message {
-            margin-bottom: 0.5rem;
-            padding: 0.3rem 0.5rem;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
+        .pixel-button:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px #1e40af;
         }
-        .message-mine {
-            background-color: #238636;
-            margin-left: auto;
-            text-align: right;
+        /* バトルメニュー用のスタイル */
+        #combat-menu-box {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            z-index: 10;
         }
-        .message-other {
-            background-color: #1f6feb;
-            text-align: left;
+        .menu-item {
+            padding: 8px;
+            cursor: pointer;
+            transition: background-color 0.1s;
         }
-        .gm-action-button {
-            transition: all 0.15s ease-in-out;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+        .menu-item.selected {
+            background-color: #3b82f6;
+            color: #0f172a;
         }
-        .gm-action-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+        /* クリックしてスタート画面 */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            cursor: pointer;
         }
-        /* Mobile adjustments */
-        @media (max-width: 640px) {
-            .container {
-                padding: 0.5rem;
-            }
-            .chat-container {
-                height: 300px;
-            }
+        .blink {
+            animation: blinker 1s linear infinite;
+        }
+        @keyframes blinker {
+            50% { opacity: 0; }
         }
     </style>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        setLogLevel('Debug');
+
+        window.initializeApp = initializeApp;
+        window.getAuth = getAuth;
+        window.signInAnonymously = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.getFirestore = getFirestore;
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.setDoc = setDoc;
+        window.onSnapshot = onSnapshot;
+    </script>
 </head>
-<body class="p-4 sm:p-8">
-    <div id="app" class="container mx-auto">
-        <h1 class="text-3xl font-bold mb-6 text-center text-blue-400">リアルタイム人狼 (GM進行型)</h1>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
 
-        <!-- ロビー/認証エリア -->
-        <div id="lobby-area" class="card p-6 rounded-xl space-y-4">
-            <h2 class="text-xl font-semibold mb-3">参加者情報</h2>
-            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                <input id="player-name-input" type="text" placeholder="あなたの名前を入力"
-                       class="flex-1 p-3 rounded-lg bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:ring-2 focus:ring-blue-500">
-                <button id="set-name-button"
-                        class="px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150">
-                    名前を決定
-                </button>
+    <!-- メインコンテナ -->
+    <div class="max-w-4xl w-full relative">
+        <h1 class="text-3xl font-bold text-center mb-6 text-yellow-400">ゼイジャックエストI <span class="text-sm text-cyan-300 block">~Cyber Security Saga~</span></h1>
+        
+        <div class="flex flex-col lg:flex-row gap-4">
+            
+            <!-- ゲーム画面コンテナ -->
+            <div id="game-container" class="lg:w-3/4 flex justify-center relative">
+                <!-- tabindex="0" を追加してキャンバス自体がフォーカスを受け取れるようにする -->
+                <canvas id="gameCanvas" width="512" height="512" class="w-full max-w-lg" tabindex="0"></canvas>
+
+                <!-- スタート画面オーバーレイ (フォーカス取得用) -->
+                <div id="start-screen" onclick="startGame()">
+                    <h2 class="text-4xl text-yellow-400 mb-4 font-bold">CLICK TO START</h2>
+                    <p class="text-cyan-300 blink">画面をクリックしてシステム接続</p>
+                </div>
+
+                <!-- バトルUI要素: 敵ステータス -->
+                <div id="enemy-status-box" class="rpg-window p-3 absolute top-4 left-4 w-64 hidden">
+                    <h3 id="enemyName" class="text-lg text-red-400">--</h3>
+                    <div class="mt-1">
+                        <p class="text-xs">HP: <span id="enemyHpText">-- / --</span></p>
+                        <div class="w-full bg-gray-700 rounded-full h-2.5">
+                            <div id="enemyHpBar" class="h-2.5 rounded-full bg-red-600" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- バトルUI要素: コマンドメニュー -->
+                <div id="combat-menu-box" class="rpg-window p-2 hidden">
+                    <h3 class="text-yellow-300 text-lg mb-1 border-b border-gray-700 pb-1">コマンド</h3>
+                    <div id="commandList" class="space-y-1">
+                        <!-- コマンドアイテムはJSで挿入されます -->
+                    </div>
+                </div>
             </div>
-            <p id="current-user-info" class="text-sm text-gray-400 mt-2 break-all">UserID: 未認証</p>
-            <p id="current-name-display" class="font-bold text-lg">現在の名前: N/A</p>
 
-            <hr class="border-gray-700">
-
-            <h2 class="text-xl font-semibold mb-3">ゲーム作成・参加</h2>
-            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-                <input id="game-id-input" type="text" placeholder="ゲームIDを入力 (例: MOON1)"
-                       class="flex-1 p-3 rounded-lg bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:ring-2 focus:ring-blue-500">
-                <button id="create-game-button"
-                        class="px-4 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-150 gm-action-button">
-                    ゲームを作成
-                </button>
-                <button id="join-game-button"
-                        class="px-4 py-3 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition duration-150">
-                    ゲームに参加
-                </button>
+            <!-- サイドバー/情報パネル -->
+            <div class="lg:w-1/4">
+                <div class="rpg-window p-4 mb-4">
+                    <h2 class="text-xl text-yellow-300 border-b border-gray-500 pb-1 mb-2">現在の状況</h2>
+                    <p id="playerJob" class="text-sm">職業: --</p>
+                    <p id="playerLevel" class="text-sm">Lv: --</p>
+                    <p id="playerHP" class="text-sm">HP: --</p>
+                    <p id="statusMessage" class="text-sm text-green-400 mt-2 h-10 overflow-hidden">待機中...</p>
+                    <p class="text-xs mt-3 text-gray-400">UserID: <span id="userIdDisplay">未認証</span></p>
+                </div>
+                
+                <div class="rpg-window p-4">
+                    <h2 class="text-xl text-yellow-300 border-b border-gray-500 pb-1 mb-2">操作方法</h2>
+                    <ul class="list-disc list-inside text-sm space-y-1">
+                        <li>移動/選択: <span class="text-blue-400">矢印キー</span></li>
+                        <li>決定/攻撃: <span class="text-blue-400">Enterキー</span></li>
+                        <li>メニュー: <span class="text-blue-400">Eキー</span></li>
+                    </ul>
+                    <p class="text-xs text-gray-500 mt-2">※キーが効かない場合は画面をクリック</p>
+                </div>
             </div>
         </div>
+        
+        <!-- ゲーム内メッセージウィンドウ -->
+        <div id="message-box" class="rpg-window p-4 mt-4 w-full h-24 flex items-center hidden">
+            <p id="message-text" class="text-lg leading-relaxed"></p>
+        </div>
 
-        <!-- ゲームプレイエリア (ロビー参加後表示) -->
-        <div id="game-area" class="card p-6 rounded-xl mt-6 hidden">
-            <div class="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center">
-                <h2 id="game-title" class="text-2xl font-bold text-yellow-300">ゲームID: </h2>
-                <div class="flex items-center space-x-2 mt-2 md:mt-0">
-                    <p class="text-sm">現在のフェーズ:</p>
-                    <span id="game-status-display" class="px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600">ロビー</span>
+    </div>
+
+    <!-- Eキーメニューモーダル -->
+    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden" onclick="refocusGame(event)">
+        <div class="rpg-window p-6 w-11/12 max-w-xl" onclick="event.stopPropagation()">
+            <h2 class="text-2xl text-red-400 mb-4 border-b border-gray-500 pb-2">インベントリ・ステータス</h2>
+            
+            <div id="jobSelection" class="space-y-3 mb-6">
+                <h3 class="text-lg text-yellow-300">職業選択 (最初のみ)</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="selectJob('ホワイトハッカー')" class="pixel-button bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded">ホワイトハッカー(勇者)</button>
+                    <button onclick="selectJob('セキュリティエンジニア')" class="pixel-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded">S.E.(魔法使い)</button>
+                    <button onclick="selectJob('ファイアウォール')" class="pixel-button bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded">FW(剣士)</button>
+                    <button onclick="selectJob('フルスタック賢者')" class="pixel-button bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded">フルスタック(賢者)</button>
+                    <button onclick="selectJob('デバッガー')" class="pixel-button bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 rounded">デバッガー(魔物使い)</button>
                 </div>
             </div>
 
-            <!-- プレイヤー情報と役割 -->
-            <div class="mb-6 card p-4">
-                <p id="your-role" class="text-xl font-extrabold text-red-400 text-center mb-2"></p>
-                <p id="role-description" class="text-sm text-gray-400 text-center"></p>
+            <div id="statsDisplay" class="mb-6 border p-3 border-gray-700 rounded">
+                <h3 class="text-lg text-yellow-300 mb-2">ステータス</h3>
+                <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- プレイヤーリスト -->
-                <div class="md:col-span-1">
-                    <h3 class="text-lg font-semibold mb-3">参加者 (<span id="player-count">0</span>人)</h3>
-                    <div id="player-list" class="space-y-2 card p-3 h-64 overflow-y-auto">
-                        <!-- プレイヤーカードがここに挿入されます -->
-                    </div>
-                </div>
-
-                <!-- チャット/アクションエリア -->
-                <div class="md:col-span-2 space-y-4">
-                    <h3 class="text-lg font-semibold mb-3">議論 & アクション</h3>
-
-                    <!-- メッセージ表示エリア -->
-                    <div id="chat-messages" class="chat-container">
-                        <!-- メッセージがここに挿入されます -->
-                    </div>
-
-                    <!-- メッセージ入力フォーム -->
-                    <div id="chat-input-area" class="flex space-x-3">
-                        <input id="message-input" type="text" placeholder="メッセージを入力..."
-                               class="flex-1 p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500" disabled>
-                        <button id="send-message-button"
-                                class="px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150" disabled>
-                            送信
-                        </button>
-                    </div>
-
-                    <!-- GMアクションエリア -->
-                    <div id="gm-actions" class="pt-4 border-t border-gray-700 space-y-3 hidden">
-                        <h3 class="text-lg font-semibold text-red-500">ゲームマスター (GM) コントロール</h3>
-                        <div id="gm-buttons" class="flex flex-wrap gap-3">
-                            <button id="start-game-button" class="px-4 py-2 bg-pink-700 text-white font-bold rounded-lg hover:bg-pink-800 gm-action-button">
-                                ゲーム開始 & 役割決定
-                            </button>
-                            <button id="next-phase-button" class="px-4 py-2 bg-red-700 text-white font-bold rounded-lg hover:bg-red-800 gm-action-button" disabled>
-                                次のフェーズへ
-                            </button>
-                            <button id="reset-game-button" class="px-4 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 gm-action-button">
-                                ゲームリセット
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- アクション選択エリア (投票や襲撃) -->
-                    <div id="action-area" class="pt-4 border-t border-gray-700 space-y-3 hidden">
-                        <h3 id="action-title" class="text-lg font-semibold text-orange-400">アクション待ち...</h3>
-                        <div id="action-targets" class="flex flex-wrap gap-2">
-                            <!-- アクションターゲットボタンがここに挿入されます -->
-                        </div>
-                    </div>
-
-                    <!-- 結果エリア (innerHTMLで全体を更新) -->
-                    <div id="result-area" class="card p-4 bg-yellow-900/30 border-yellow-700 hidden">
-                        <!-- 結果コンテンツがここに挿入されます -->
-                    </div>
-                </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button onclick="saveGame()" class="pixel-button bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">セーブ</button>
+                <button onclick="closeMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">閉じる (E)</button>
             </div>
         </div>
     </div>
     
-    <!-- Custom Modal for Alerts/Seer Results (アラート代替) -->
-    <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
-        <div id="modal-content-wrapper" class="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full">
-            <h3 id="modal-title" class="text-xl font-bold mb-3 text-red-400"></h3>
-            <p id="modal-content" class="text-white mb-4"></p>
-            <button id="modal-close-button" class="w-full py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">閉じる</button>
-        </div>
-    </div>
-
-    <!-- Firebase SDKs -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, setDoc, updateDoc, arrayUnion, runTransaction, getDocs, query, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- Firebase Init ---
+        let db;
+        let auth;
+        let userId = 'anonymous'; 
 
-        // Firestoreのデバッグログを有効にする
-        setLogLevel('Debug');
-
-        // ★★★ ユーザー提供の Firebase 設定を組み込みます ★★★
-        const STATIC_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyBPMqx8KHacF0XiRLSRztxXiRHoGdXFpCQ",
-            authDomain: "talk-to-friends-point.firebaseapp.com",
-            projectId: "talk-to-friends-point",
-            storageBucket: "talk-to-friends-point.firebaseapp.com",
-            messagingSenderId: "1012267135320",
-            appId: "1:1012267135320:web:1bb99aa6249c88bfac752d",
-            measurementId: "G-RFX7NK1Q28"
-        };
-        // 環境変数からの設定は無視し、STATIC_FIREBASE_CONFIGを使用します。
-        const firebaseConfig = STATIC_FIREBASE_CONFIG;
-        
-        // __app_id は Firestore のセキュリティルールに必要なので、環境から取得します。
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // ★★★ 組み込みここまで ★★★
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        const USER_DOC_PATH = (uid) => `artifacts/${appId}/users/${uid}/metadata/gameState`;
 
+        let isAuthReady = false;
 
-        // グローバル変数
-        let app = null;
-        let db = null;
-        let auth = null;
-        let userId = null;
-        let userName = localStorage.getItem('werewolf_user_name') || '';
-        let gameId = localStorage.getItem('werewolf_game_id') || '';
+        async function initFirebase() {
+            try {
+                const app = window.initializeApp(firebaseConfig);
+                db = window.getFirestore(app);
+                auth = window.getAuth(app);
 
-        // ゲームの状態を保持するリアクティブオブジェクト
+                if (initialAuthToken) {
+                    await window.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await window.signInAnonymously(auth);
+                }
+
+                window.onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('userIdDisplay').textContent = userId.substring(0, 8) + '...';
+                        isAuthReady = true;
+                        loadGame();
+                    } else {
+                        isAuthReady = true;
+                        initGame();
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                isAuthReady = true;
+                initGame();
+            }
+        }
+        
+        // --- ゲーム定数と変数 ---
+        const TILE_SIZE = 32;
+        const CANVAS_SIZE = 512;
+        const MAP_COLS = 16;
+        const MAP_ROWS = 16;
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // タイルタイプ
+        const TILE_GROUND = 0; 
+        const TILE_WALL = 1; 
+        const TILE_GRASS = 2; 
+        const TILE_START = 9; 
+
+        const gameMap = [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 9, 0, 0, 2, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 2, 2, 0, 0, 0, 1, 0, 2, 2, 0, 2, 0, 1],
+            [1, 0, 2, 2, 0, 0, 1, 1, 1, 0, 2, 1, 0, 2, 0, 1],
+            [1, 0, 2, 0, 0, 0, 1, 2, 2, 2, 2, 1, 0, 2, 0, 1],
+            [1, 0, 0, 0, 1, 0, 1, 2, 1, 1, 1, 1, 0, 0, 0, 1],
+            [1, 0, 1, 1, 1, 0, 1, 2, 2, 2, 0, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1],
+            [1, 2, 2, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1],
+            [1, 2, 1, 2, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+            [1, 0, 1, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 2, 2, 2, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        ];
+
+        const JOB_BASE_STATS = {
+            'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5, desc: '攻守のバランスが良い。脆弱性診断が得意。' },
+            'セキュリティエンジニア': { str: 4, mag: 12, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。論理防御は低いが火力は高い。' },
+            'ファイアウォール': { str: 12, mag: 2, vit: 12, spd: 4, expRate: 1.1, desc: '物理遮断特化。圧倒的な防御力でパケットを防ぐ。' },
+            'フルスタック賢者': { str: 5, mag: 15, vit: 7, spd: 7, expRate: 1.4, desc: '全レイヤー(魔法)大UP。あらゆるプロトコルに精通。' },
+            'デバッガー': { str: 7, mag: 7, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)を手なずける。成長は遅いが、修正時のインパクト大。' },
+        };
+
+        const COMBAT_COMMANDS = ['パケット攻撃', 'スキル', '修復アイテム', 'ログアウト'];
+
         let gameState = {
-            status: 'uninitialized', // lobby, day, night, voting, finished
-            phase: 'waiting', // discussion, vote, action, result
-            dayCount: 0,
-            hostId: null,
-            players: {},
-            messages: [],
-            // 夜のアクションを個別で追跡するフィールドを追加
-            werewolfTarget: null, // 人狼のターゲットID
-            guardTarget: null,    // 騎士のターゲットID
-            lastActionTarget: null, // 昼の投票ターゲットID
-            eliminatedId: null,
-            winner: null,
-            nightActionsCompleted: [], // 夜の行動を完了した能力者のIDリスト
+            x: 0,
+            y: 0,
+            level: 1,
+            job: '',
+            exp: 0,
+            maxHP: 50,
+            currentHP: 50,
+            stats: { str: 5, mag: 5, vit: 5, spd: 5 },
+            eventFlags: {},
+            messageTimer: null,
+            isMenuOpen: false,
+            mode: 'OVERWORLD',
+            currentEnemy: null,
+            selectedCommand: 0,
+            combatLock: false,
+        };
+        
+        // --- フォーカスと開始処理 ---
+        // グローバル関数として定義し、HTMLから呼べるようにする
+        window.startGame = function() {
+            const startScreen = document.getElementById('start-screen');
+            startScreen.classList.add('hidden');
+            // キャンバスにフォーカスを当てる
+            canvas.focus();
+            showMessage("システム接続確立。キー操作が可能になりました。", 3000);
         };
 
-        const GAME_COLLECTION = 'werewolf_games';
-        const REQUIRED_NIGHT_ROLES = ['werewolf', 'seer', 'guard']; // 行動が必要な能力者 (wolf_mate, bakerは特殊能力なし/夜行動なし)
+        window.refocusGame = function(event) {
+            // モーダルの外側をクリックしたら閉じるなどの処理がある場合
+            // ここでは特に何もしないが、メニューを閉じる際にフォーカスを戻す
+        };
 
-        // DOM要素の取得
-        const nameInput = document.getElementById('player-name-input');
-        const setNameButton = document.getElementById('set-name-button');
-        const gameIdInput = document.getElementById('game-id-input');
-        const createGameButton = document.getElementById('create-game-button');
-        const joinGameButton = document.getElementById('join-game-button');
-        const lobbyArea = document.getElementById('lobby-area');
-        const gameArea = document.getElementById('game-area');
-        const gameTitle = document.getElementById('game-title');
-        const gameStatusDisplay = document.getElementById('game-status-display');
-        const yourRoleDisplay = document.getElementById('your-role');
-        const roleDescription = document.getElementById('role-description');
-        const playerListContainer = document.getElementById('player-list');
-        const playerCountDisplay = document.getElementById('player-count');
-        const chatMessagesContainer = document.getElementById('chat-messages');
-        const messageInput = document.getElementById('message-input');
-        const sendMessageButton = document.getElementById('send-message-button');
-        const gmActionsArea = document.getElementById('gm-actions');
-        const startGameButton = document.getElementById('start-game-button');
-        const nextPhaseButton = document.getElementById('next-phase-button');
-        const resetGameButton = document.getElementById('reset-game-button');
-        const actionArea = document.getElementById('action-area');
-        const actionTitle = document.getElementById('action-title');
-        const actionTargetsContainer = document.getElementById('action-targets');
-        const resultArea = document.getElementById('result-area');
-        
-        // モーダル関連のDOM要素を取得
-        const customModal = document.getElementById('custom-modal');
-        const modalCloseButton = document.getElementById('modal-close-button');
-        const modalContentWrapper = document.getElementById('modal-content-wrapper');
-
-
-        // --- 新しい役割マップとヘルパー関数 ---
-        function getRoleMap() {
-            return {
-                werewolf: { name: '人狼', desc: '夜に村人を襲撃できます。', team: 'werewolves' },
-                wolf_mate: { name: '人狼の相棒', desc: '人狼陣営です。自分が追放された際、生存者を道連れにします。', team: 'werewolves' }, // 新規追加
-                seer: { name: '占い師', desc: '夜に一人を占えます。', team: 'villagers' },
-                guard: { name: '騎士', desc: '夜に一人を守れます。守った人が襲撃された場合、死亡を防げます。', team: 'villagers' },
-                baker: { name: 'パン屋', desc: '村人陣営です。生存していると、パンの香りで平和なメッセージが流れます。', team: 'villagers' }, // 新規追加
-                villager: { name: '村人', desc: '特別な能力はありません。', team: 'villagers' },
-                unknown: { name: '未定', desc: 'ゲーム開始までお待ちください。', team: 'unknown' }
-            };
-        }
-
-        function getRoleDisplayName(roleKey) {
-            const roleMap = getRoleMap();
-            return roleMap[roleKey] ? roleMap[roleKey].name : '不明';
-        }
-        // --- ヘルパー関数終わり ---
-
-
-        // Firebaseの設定と初期化
-        if (firebaseConfig && Object.keys(firebaseConfig).length > 0) {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-
-            // 認証処理
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                } else {
-                    // 認証トークンがない場合は匿名認証
-                    const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    try {
-                        if (token) {
-                            const userCredential = await signInWithCustomToken(auth, token);
-                            userId = userCredential.user.uid;
-                        } else {
-                            const userCredential = await signInAnonymously(auth);
-                            userId = userCredential.user.uid;
+        // --- ゲーム初期化とメインループ ---
+        function initGame() {
+            let startFound = false;
+            for (let y = 0; y < MAP_ROWS; y++) {
+                for (let x = 0; x < MAP_COLS; x++) {
+                    if (gameMap[y][x] === TILE_START) {
+                        if (gameState.x === 0 && gameState.y === 0) {
+                            gameState.x = x;
+                            gameState.y = y;
                         }
-                    } catch (error) {
-                        console.error("Authentication failed:", error);
-                        // 認証失敗時もとりあえずランダムIDを使う
-                        userId = crypto.randomUUID();
+                        startFound = true;
+                        break;
                     }
                 }
-                document.getElementById('current-user-info').textContent = `UserID: ${userId}`;
-                if (userName) {
-                    document.getElementById('current-name-display').textContent = `現在の名前: ${userName}`;
-                    document.getElementById('player-name-input').value = userName;
-                }
-                if (gameId) {
-                    joinGame(gameId); // 以前のゲームに自動参加を試みる
-                }
-            });
-        } else {
-            console.error("Firebase configuration is missing or invalid.");
-            userId = crypto.randomUUID(); // Fallback ID
-            document.getElementById('current-user-info').textContent = `UserID: ${userId} (Firebase無効)`;
-        }
-        
-        // =========================================================
-        // カスタムモーダル (アラートの代替)
-        // =========================================================
-        /** カスタムモーダルを表示する */
-        function showModal(title, content) {
-            document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-content').textContent = content;
-            customModal.classList.remove('hidden');
-        }
-
-        /** カスタムモーダルを非表示にする */
-        function hideModal() {
-            customModal.classList.add('hidden');
-        }
-        
-        // モーダルイベントリスナーの設定
-        if (customModal && modalCloseButton && modalContentWrapper) {
-            modalCloseButton.addEventListener('click', hideModal);
-            customModal.addEventListener('click', (event) => {
-                if (event.target === customModal) {
-                    hideModal();
-                }
-            });
-            modalContentWrapper.addEventListener('click', (event) => {
-                event.stopPropagation();
-            });
-        }
-
-
-        // =========================================================
-        // ユーザー名設定
-        // =========================================================
-        setNameButton.addEventListener('click', () => {
-            const newName = nameInput.value.trim();
-            if (newName.length > 0) {
-                userName = newName;
-                localStorage.setItem('werewolf_user_name', userName);
-                document.getElementById('current-name-display').textContent = `現在の名前: ${userName}`;
-            } else {
-                console.error('名前を入力してください。');
+                if (startFound) break;
             }
-        });
+            requestAnimationFrame(gameLoop);
+        }
 
-        // =========================================================
-        // ゲーム管理
-        // =========================================================
+        function gameLoop() {
+            ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            
+            if (gameState.mode === 'OVERWORLD') {
+                drawMap();
+                drawPlayer();
+            } else if (gameState.mode === 'COMBAT') {
+                drawBattleScreen();
+                document.getElementById('enemy-status-box').classList.remove('hidden');
+                document.getElementById('combat-menu-box').classList.remove('hidden');
+                renderCombatMenu();
+            }
 
-        /** ゲームドキュメントの参照を取得する */
-        const getGameDocRef = (id) => {
-            if (!db) return null;
-            // Public Collection Path: /artifacts/{appId}/public/data/werewolf_games/{gameId}
-            return doc(db, 'artifacts', appId, 'public', 'data', GAME_COLLECTION, id);
-        };
-
-        /** ゲームを作成する */
-        createGameButton.addEventListener('click', async () => {
-            if (!userId || !userName) { console.error('先に名前を決定してください。'); return; }
-            const newGameId = gameIdInput.value.trim().toUpperCase() || crypto.randomUUID().substring(0, 5).toUpperCase();
-
-            const initialGameData = {
-                ...gameState, // gameStateの初期値を展開
-                status: 'lobby',
-                phase: 'waiting',
-                hostId: userId,
-                players: {
-                    [userId]: { name: userName, isAlive: true, role: 'unknown', votes: 0, isHost: true }
-                },
-                messages: [{ userId: 'system', name: 'システム', text: `${userName} がゲームを開始しました。`, timestamp: Date.now() }],
+            updateStatusDisplay();
+            
+            if (!gameState.isMenuOpen) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // --- 描画処理 ---
+        function drawTile(x, y, type) {
+            const colors = {
+                [TILE_GROUND]: '#1e293b',
+                [TILE_WALL]: '#475569',
+                [TILE_GRASS]: '#0f766e',
+                [TILE_START]: '#1e293b'
             };
+            ctx.fillStyle = colors[type] || '#000';
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-            try {
-                const gameRef = getGameDocRef(newGameId);
-                await setDoc(gameRef, initialGameData);
-                gameId = newGameId;
-                localStorage.setItem('werewolf_game_id', gameId);
-                startListening(gameRef);
-                console.log(`ゲーム ${newGameId} を作成しました。`);
-            } catch (e) {
-                console.error("ゲーム作成エラー:", e);
+            if (type === TILE_GRASS) {
+                ctx.fillStyle = '#2dd4bf';
+                ctx.fillRect(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 4, 4);
+                ctx.fillRect(x * TILE_SIZE + 20, y * TILE_SIZE + 20, 4, 4);
+            } else if (type === TILE_WALL) {
+                ctx.strokeStyle = '#94a3b8';
+                ctx.beginPath();
+                ctx.moveTo(x * TILE_SIZE, y * TILE_SIZE);
+                ctx.lineTo(x * TILE_SIZE + TILE_SIZE, y * TILE_SIZE + TILE_SIZE);
+                ctx.stroke();
+            } else if (type === TILE_START) {
+                ctx.fillStyle = '#3b82f6';
+                ctx.font = '20px monospace';
+                ctx.fillText('S', x * TILE_SIZE + 8, y * TILE_SIZE + 24);
             }
-        });
+        }
 
-        /** ゲームに参加する */
-        joinGameButton.addEventListener('click', () => {
-            if (!userId || !userName) { console.error('先に名前を決定してください。'); return; }
-            const targetGameId = gameIdInput.value.trim().toUpperCase();
-            if (targetGameId.length === 0) { console.error('参加するゲームIDを入力してください。'); return; }
-            joinGame(targetGameId);
-        });
+        function drawPlayer() {
+            const px = gameState.x * TILE_SIZE;
+            const py = gameState.y * TILE_SIZE;
+            ctx.fillStyle = '#facc15'; 
+            ctx.beginPath();
+            ctx.moveTo(px + 16, py + 4);
+            ctx.lineTo(px + 28, py + 28);
+            ctx.lineTo(px + 4, py + 28);
+            ctx.fill();
+        }
 
-        async function joinGame(targetGameId) {
-            const gameRef = getGameDocRef(targetGameId);
-            if (!gameRef) return;
+        function drawMap() {
+            for (let y = 0; y < MAP_ROWS; y++) {
+                for (let x = 0; x < MAP_COLS; x++) {
+                    drawTile(x, y, gameMap[y][x]);
+                }
+            }
+        }
 
-            try {
-                await runTransaction(db, async (transaction) => {
-                    const gameDoc = await transaction.get(gameRef);
+        function drawBattleScreen() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_SIZE);
+            gradient.addColorStop(0, '#0f172a');
+            gradient.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-                    if (!gameDoc.exists()) {
-                        throw new Error("指定されたゲームIDは存在しません。");
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+            ctx.lineWidth = 1;
+            for(let i = 0; i < CANVAS_SIZE; i+=40) {
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CANVAS_SIZE, i); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, CANVAS_SIZE); ctx.stroke();
+            }
+
+            if (gameState.currentEnemy) {
+                const cx = CANVAS_SIZE / 2;
+                const cy = CANVAS_SIZE / 3;
+                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : 
+                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.beginPath();
+                ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = enemyColor;
+                ctx.beginPath();
+                if (gameState.currentEnemy.isBoss) {
+                    ctx.moveTo(cx, cy - 80);
+                    ctx.lineTo(cx + 60, cy);
+                    ctx.lineTo(cx + 40, cy + 80);
+                    ctx.lineTo(cx - 40, cy + 80);
+                    ctx.lineTo(cx - 60, cy);
+                } else {
+                    ctx.moveTo(cx, cy - 50);
+                    ctx.lineTo(cx + 40, cy);
+                    ctx.lineTo(cx + 20, cy + 60);
+                    ctx.lineTo(cx - 20, cy + 60);
+                    ctx.lineTo(cx - 40, cy);
+                }
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(cx - 20, cy - 10, 10, 10);
+                ctx.fillRect(cx + 10, cy - 10, 10, 10);
+
+                ctx.font = '20px DotGothic16';
+                ctx.fillStyle = '#fef08a';
+                ctx.textAlign = 'center';
+                ctx.fillText(gameState.currentEnemy.name, cx, cy + 120);
+            }
+        }
+
+        // --- 移動システム ---
+        const MOVEMENT_COOLDOWN = 150; 
+        let lastMoveTime = 0;
+
+        function mod(n, m) {
+            return ((n % m) + m) % m;
+        }
+
+        function attemptMove(dx, dy) {
+            // 未ログインやメニュー中は移動不可（ただしメニューを開くEキーはkeydownで制御）
+            if (gameState.isMenuOpen || gameState.mode === 'COMBAT') return;
+
+            // 職業未選択時の移動試行でメッセージ
+            if (!gameState.isJobSelected) {
+                showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 2000);
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastMoveTime < MOVEMENT_COOLDOWN) return;
+            lastMoveTime = now;
+
+            const nextX = gameState.x + dx;
+            const nextY = gameState.y + dy;
+            const newX = mod(nextX, MAP_COLS);
+            const newY = mod(nextY, MAP_ROWS);
+
+            const targetTile = gameMap[newY][newX];
+
+            if (targetTile !== TILE_WALL) {
+                gameState.x = newX; 
+                gameState.y = newY;
+                
+                if (!checkStoryEvent(newX, newY)) {
+                     if (targetTile === TILE_GRASS) {
+                        checkEncounter();
                     }
+                }
+            }
+        }
+        
+        // --- バトルロジック ---
+        function checkEncounter() {
+            if (Math.random() < 0.15 && !gameState.combatLock) { 
+                initCombat();
+            }
+        }
 
-                    const currentData = gameDoc.data();
-                    if (currentData.status !== 'lobby' && !currentData.players[userId]) {
-                        throw new Error("ゲームはすでに開始しており、途中参加はできません。");
+        const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師'];
+        const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
+        
+        function initCombat(bossData = null) {
+            gameState.mode = 'COMBAT';
+            gameState.selectedCommand = 0;
+            gameState.combatLock = false;
+
+            if (bossData) {
+                gameState.currentEnemy = bossData;
+                showMessage(`警告: ${bossData.name} が立ちはだかった！`, 4000);
+            } else {
+                const isZeiJack = Math.random() > 0.4;
+                const enemyName = isZeiJack 
+                    ? ZEIJACK_NAMES[Math.floor(Math.random() * ZEIJACK_NAMES.length)]
+                    : PROMON_NAMES[Math.floor(Math.random() * PROMON_NAMES.length)];
+                
+                const enemyLevel = Math.max(1, gameState.level + Math.floor(Math.random() * 3) - 1);
+                const baseHp = 25 + enemyLevel * 8;
+
+                gameState.currentEnemy = {
+                    name: enemyName,
+                    maxHP: baseHp,
+                    currentHP: baseHp,
+                    level: enemyLevel,
+                    type: isZeiJack ? 'ZeiJack' : 'Promon',
+                    isBoss: false
+                };
+                showMessage(isZeiJack ? "不正なプロセスを検知！" : "中立なデータと遭遇。", 3000);
+            }
+            // バトル開始時はメニューを閉じる
+            gameState.isMenuOpen = false;
+            document.getElementById('menuModal').classList.add('hidden');
+        }
+
+        function endCombat(outcome) {
+            const enemy = gameState.currentEnemy;
+            gameState.mode = 'OVERWORLD';
+            gameState.currentEnemy = null;
+            gameState.combatLock = false;
+            
+            document.getElementById('enemy-status-box').classList.add('hidden');
+            document.getElementById('combat-menu-box').classList.add('hidden');
+
+            if (outcome === 'WIN') {
+                const expGain = enemy.isBoss ? 500 : Math.floor(Math.random() * 20) + 10 * enemy.level;
+                gameState.exp += expGain;
+                showMessage(`脅威を排除した！ Exp+${expGain}`, 4000);
+                if (enemy.isBoss) {
+                    setTimeout(() => showMessage("「魔王エクスプロイト」は崩壊し、システムの制御権が戻った！ 世界に平和が訪れたのだ...", 10000), 4000);
+                }
+                checkLevelUp();
+            } else if (outcome === 'LOSE') {
+                showMessage("システムダウン... 再起動します。", 4000);
+                gameState.currentHP = Math.floor(gameState.maxHP / 2);
+                gameState.x = 1; gameState.y = 1; 
+            } else if (outcome === 'ESCAPE') {
+                showMessage("セッションを切断し、離脱しました。", 3000);
+            }
+            
+            // バトル終了後にフォーカスをキャンバスに戻す
+            canvas.focus();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function executeCommand(command) {
+            if (gameState.combatLock) return;
+            gameState.combatLock = true;
+            
+            switch (command) {
+                case 'パケット攻撃': performAttack(); break;
+                case 'スキル':
+                    showMessage("スキルモジュールは未実装です。", 1500);
+                    gameState.combatLock = false;
+                    break;
+                case '修復アイテム':
+                    if (gameState.currentHP < gameState.maxHP) {
+                        const heal = Math.floor(gameState.maxHP * 0.3);
+                        gameState.currentHP = Math.min(gameState.maxHP, gameState.currentHP + heal);
+                        showMessage(`パッチを適用。HPが${heal}回復した。`, 2000);
+                        setTimeout(enemyTurn, 2500);
+                    } else {
+                        showMessage("システムは正常です。", 1500);
+                        gameState.combatLock = false;
                     }
+                    break;
+                case 'ログアウト':
+                    if (gameState.currentEnemy.isBoss) {
+                        showMessage("管理者権限によりログアウトできません！", 2000);
+                        setTimeout(() => gameState.combatLock = false, 2000);
+                    } else {
+                        performEscape();
+                    }
+                    break;
+            }
+        }
+        
+        function performAttack() {
+            const crit = Math.random() < 0.1 ? 2 : 1;
+            const damage = Math.floor(Math.max(1, gameState.stats.str * 1.5 - (gameState.currentEnemy.level * 0.5)) * crit);
+            showMessage(`攻撃パケット送信... ${crit > 1 ? "クリティカル！" : ""} ${gameState.currentEnemy.name}に${damage}ダメージ！`, 3000);
+            gameState.currentEnemy.currentHP -= damage;
+            
+            if (gameState.currentEnemy.currentHP <= 0) {
+                gameState.currentEnemy.currentHP = 0;
+                setTimeout(() => endCombat('WIN'), 3500);
+            } else {
+                setTimeout(enemyTurn, 4000);
+            }
+        }
+        
+        function performEscape() {
+            const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
+            if (Math.random() < chance + 0.5) { 
+                setTimeout(() => endCombat('ESCAPE'), 1000);
+            } else {
+                showMessage("接続を切断できない！", 2000);
+                setTimeout(enemyTurn, 2500);
+            }
+        }
 
-                    const newPlayerEntry = {
-                        name: userName,
-                        isAlive: true,
-                        role: 'unknown',
-                        votes: 0,
-                        isHost: currentData.hostId === userId
-                    };
+        function enemyTurn() {
+            const enemy = gameState.currentEnemy;
+            const damage = Math.floor(Math.max(0, enemy.level * 2 + 5 - gameState.stats.vit / 2));
+            gameState.currentHP -= damage;
+            showMessage(`${enemy.name}の反撃！ ${damage}のダメージを受けた！`, 3000);
 
-                    const newPlayers = {
-                        ...currentData.players,
-                        [userId]: newPlayerEntry
-                    };
+            if (gameState.currentHP <= 0) {
+                gameState.currentHP = 0;
+                setTimeout(() => endCombat('LOSE'), 3500);
+            } else {
+                setTimeout(() => gameState.combatLock = false, 3500);
+            }
+        }
 
-                    const systemMessage = {
-                        userId: 'system',
-                        name: 'システム',
-                        text: `${userName} がゲームに参加しました。`,
-                        timestamp: Date.now()
-                    };
+        function checkLevelUp() {
+            const expNeeded = gameState.level * 100 * 1.2;
+            if (gameState.exp >= expNeeded) {
+                gameState.level++;
+                gameState.exp = 0; 
+                
+                const job = JOB_BASE_STATS[gameState.job] || {str:2, mag:2, vit:2, spd:2};
+                gameState.stats.str += Math.ceil(job.str / 3);
+                gameState.stats.mag += Math.ceil(job.mag / 3);
+                gameState.stats.vit += Math.ceil(job.vit / 3);
+                gameState.stats.spd += Math.ceil(job.spd / 3);
+                
+                gameState.maxHP += 10 + Math.floor(job.vit / 2);
+                gameState.currentHP = gameState.maxHP;
 
-                    transaction.update(gameRef, {
-                        players: newPlayers,
-                        messages: arrayUnion(systemMessage)
+                showMessage(`レベルアップ！ Lv${gameState.level}になり、システム性能が向上しました。`, 5000);
+            }
+        }
+        
+        // --- イベントシステム ---
+        function checkStoryEvent(x, y) {
+            if (gameMap[y][x] === TILE_START && !gameState.eventFlags['START_TUTORIAL']) {
+                gameState.eventFlags['START_TUTORIAL'] = true;
+                showMessage("【システムログ】認証完了。右下の『ルートディレクトリ』を目指してください。", 8000);
+                return true;
+            }
+            if (x === 8 && y === 8 && !gameState.eventFlags['MID_WARNING']) {
+                gameState.eventFlags['MID_WARNING'] = true;
+                showMessage("【警告】DoS攻撃の痕跡があります。慎重に進んでください。", 6000);
+                return true;
+            }
+            if (x === 3 && y === 12 && !gameState.eventFlags['SECRET_CACHE']) {
+                gameState.eventFlags['SECRET_CACHE'] = true;
+                gameState.exp += 50;
+                showMessage("【発見】古いキャッシュデータを発見。経験値+50", 4000);
+                return true;
+            }
+            if (x === 14 && y === 14) {
+                if (!gameState.eventFlags['BOSS_DEFEATED']) {
+                    initCombat({
+                        name: '魔王エクスプロイト',
+                        maxHP: 300,
+                        currentHP: 300,
+                        level: 20,
+                        type: 'ZeiJack',
+                        isBoss: true
                     });
-
-                    gameId = targetGameId;
-                    localStorage.setItem('werewolf_game_id', gameId);
-                    startListening(gameRef);
-                });
-                console.log(`ゲーム ${targetGameId} に参加しました。`);
-            } catch (e) {
-                console.error("ゲーム参加エラー:", e.message);
-            }
-        }
-
-
-        let unsubscribe = null;
-        /** Firestoreのリアルタイムリスナーを開始する */
-        function startListening(gameRef) {
-            if (unsubscribe) {
-                unsubscribe(); // 既存のリスナーを解除
-            }
-
-            unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-                if (docSnapshot.exists()) {
-                    gameState = docSnapshot.data();
-                    updateUI();
-                    
-                    // 自動遷移のチェック (GMのみが実行)
-                    if (gameState.hostId === userId && gameState.status === 'night' && gameState.phase === 'action') {
-                        checkAutoPhaseTransition(gameState, gameRef);
-                    }
-
+                    return true;
                 } else {
-                    console.log("ゲームドキュメントが存在しません。");
-                    gameId = '';
-                    localStorage.removeItem('werewolf_game_id');
-                    resetUI();
+                    showMessage("ここは浄化されたルートディレクトリだ。平和なパケットが流れている。", 4000);
+                    return true;
                 }
-            }, (error) => {
-                console.error("Firestoreリスナーエラー:", error);
-            });
-
-            lobbyArea.classList.add('hidden');
-            gameArea.classList.remove('hidden');
+            }
+            return false;
         }
 
-        /** UIの全体更新 */
-        function updateUI() {
-            gameTitle.textContent = `ゲームID: ${gameId}`;
-            gameStatusDisplay.textContent = `${gameState.status === 'day' ? '昼' : gameState.status === 'night' ? '夜' : 'ロビー'} (フェーズ: ${getPhaseName(gameState.phase)}) - Day ${gameState.dayCount}`;
-            gameStatusDisplay.className = `px-3 py-1 text-sm font-semibold rounded-full ${gameState.status === 'day' ? 'bg-yellow-600' : gameState.status === 'night' ? 'bg-purple-800' : gameState.status === 'finished' ? 'bg-red-600' : 'bg-indigo-600'}`;
-
-            // 役割と説明の表示
-            const player = gameState.players[userId];
-            if (player) {
-                const roleMap = getRoleMap();
-                const currentRole = roleMap[player.role] || roleMap.unknown;
-                
-                // 役割の色分け
-                let roleColor = '#34d399'; // 村人
-                if (currentRole.team === 'werewolves') roleColor = '#f87171'; // 人狼陣営
-                else if (player.role === 'seer') roleColor = '#60a5fa'; // 占い師
-                else if (player.role === 'guard') roleColor = '#fcd34d'; // 騎士
-                else if (player.role === 'baker') roleColor = '#f7b731'; // パン屋
-                
-
-                yourRoleDisplay.textContent = `あなたの役割: ${currentRole.name} ${player.isAlive ? '' : '(死亡)'}`;
-                yourRoleDisplay.style.color = roleColor;
-                roleDescription.textContent = currentRole.desc;
+        function showMessage(text, duration = 3000) {
+            clearTimeout(gameState.messageTimer);
+            const box = document.getElementById('message-box');
+            const p = document.getElementById('message-text');
+            p.textContent = text;
+            box.classList.remove('hidden');
+            
+            if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) {
+                p.className = "text-lg leading-relaxed text-red-300";
+            } else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) {
+                p.className = "text-lg leading-relaxed text-yellow-300";
             } else {
-                 yourRoleDisplay.textContent = 'ゲームに参加していません';
-                 roleDescription.textContent = '';
+                p.className = "text-lg leading-relaxed text-green-300";
+            }
+            
+            gameState.messageTimer = setTimeout(() => {
+                box.classList.add('hidden');
+            }, duration);
+        }
+
+        function updateStatusDisplay() {
+            document.getElementById('playerJob').textContent = `${gameState.job || '未定義'}`;
+            document.getElementById('playerLevel').textContent = `Lv: ${gameState.level}`;
+            document.getElementById('playerHP').textContent = `HP: ${gameState.currentHP} / ${gameState.maxHP}`;
+            
+            if (gameState.mode === 'COMBAT' && gameState.currentEnemy) {
+                const enemy = gameState.currentEnemy;
+                document.getElementById('enemyName').textContent = `${enemy.name}`;
+                document.getElementById('enemyHpText').textContent = `${enemy.currentHP} / ${enemy.maxHP}`;
+                document.getElementById('enemyHpBar').style.width = `${(enemy.currentHP / enemy.maxHP) * 100}%`;
             }
 
-            // GMアクションエリアの制御
-            const isHost = gameState.hostId === userId;
-            gmActionsArea.classList.toggle('hidden', !isHost);
-            startGameButton.disabled = gameState.status !== 'lobby';
-            // 夜のアクションフェーズ中は自動遷移のためボタンを無効化
-            nextPhaseButton.disabled = gameState.status === 'lobby' || gameState.status === 'finished' || (gameState.status === 'night' && gameState.phase === 'action');
-            
-            // プレイヤーリストのレンダリング
-            renderPlayerList();
-            
-            // チャットのレンダリング
-            renderChatMessages();
+            const statsText = `
+Lv: ${gameState.level} (${gameState.job})
+HP: ${gameState.currentHP}/${gameState.maxHP}
+EXP: ${gameState.exp}
 
-            // アクションエリアの制御とレンダリング
-            handleActionArea(player);
+STR: ${gameState.stats.str} | MAG: ${gameState.stats.mag}
+VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
 
-            // 終了結果の表示
-            handleResultArea();
+[ロール特性]
+${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
+            `.trim();
+            document.getElementById('statusText').textContent = statsText;
+            document.getElementById('jobSelection').classList.toggle('hidden', gameState.isJobSelected);
         }
 
-        function getPhaseName(phase) {
-            const phaseNames = {
-                waiting: '待機中',
-                discussion: '議論',
-                vote: '投票',
-                action: '行動',
-                result: '結果発表',
-            };
-            return phaseNames[phase] || phase;
-        }
-
-        /** プレイヤーリストのレンダリング */
-        function renderPlayerList() {
-            playerListContainer.innerHTML = '';
-            const playerEntries = Object.entries(gameState.players);
-            playerCountDisplay.textContent = playerEntries.length;
-
-            playerEntries.forEach(([pId, pData]) => {
-                const isMine = pId === userId;
-                const isHost = pData.isHost;
-                const roleName = getRoleDisplayName(pData.role);
-                const roleText = (isMine && pData.role !== 'unknown') ? 
-                    ` (${roleName})` : '';
-                const statusColor = pData.isAlive ? 'bg-green-600' : 'bg-red-800';
-                const statusText = pData.isAlive ? '生存' : '死亡';
-
-                const playerCard = document.createElement('div');
-                playerCard.className = `flex items-center justify-between p-2 rounded-lg ${isMine ? 'bg-blue-900/50 border border-blue-500' : 'bg-gray-800'} ${pData.isAlive ? '' : 'opacity-50 line-through'}`;
-                playerCard.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="font-bold text-base">${pData.name}${isHost ? ' (GM)' : ''}</span>
-                        <span class="text-xs text-gray-400 break-all">${pId}</span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full ${statusColor}">${statusText}</span>
-                        <span class="text-xs text-yellow-300">${roleText}</span>
-                    </div>
-                `;
-                playerListContainer.appendChild(playerCard);
+        function renderCombatMenu() {
+            const list = document.getElementById('commandList');
+            list.innerHTML = '';
+            COMBAT_COMMANDS.forEach((cmd, idx) => {
+                const div = document.createElement('div');
+                div.className = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
+                div.textContent = cmd;
+                div.onclick = () => executeCommand(cmd);
+                list.appendChild(div);
             });
         }
 
-        /** チャットメッセージのレンダリング */
-        function renderChatMessages() {
-            chatMessagesContainer.innerHTML = '';
-            gameState.messages.forEach(msg => {
-                const isMine = msg.userId === userId;
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `chat-message ${isMine ? 'message-mine' : 'message-other'}`;
-                messageDiv.textContent = `${msg.name}: ${msg.text}`;
-                chatMessagesContainer.appendChild(messageDiv);
-            });
-            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-            
-            // チャット入力の有効化
-            const isAlive = gameState.players[userId]?.isAlive;
-            const canChat = (gameState.status === 'day' && gameState.phase === 'discussion' && isAlive);
-            messageInput.disabled = !canChat;
-            sendMessageButton.disabled = !canChat;
-            messageInput.placeholder = canChat ? 'メッセージを入力...' : (gameState.status === 'night' ? '夜は会話できません...' : 'あなたは死亡しました...');
-        }
+        // --- キー入力とUI操作 ---
+        
+        // メニュー操作
+        window.openMenu = function() {
+            if (!isAuthReady || gameState.mode === 'COMBAT') return;
+            gameState.isMenuOpen = true;
+            document.getElementById('menuModal').classList.remove('hidden');
+            updateStatusDisplay();
+        };
 
-        /** アクションエリアの処理 (夜の行動や昼の投票) */
-        function handleActionArea(player) {
-            actionTargetsContainer.innerHTML = '';
-            actionArea.classList.add('hidden');
+        window.closeMenu = function() {
+            gameState.isMenuOpen = false;
+            document.getElementById('menuModal').classList.add('hidden');
+            // メニューを閉じた後、キャンバスにフォーカスを戻す
+            canvas.focus();
+            requestAnimationFrame(gameLoop);
+        };
 
-            if (!player || !player.isAlive || gameState.status === 'lobby' || gameState.status === 'finished') {
+        window.selectJob = function(jobName) {
+            if (gameState.isJobSelected) return;
+            gameState.job = jobName;
+            gameState.isJobSelected = true;
+            gameState.stats = { ...JOB_BASE_STATS[jobName] };
+            gameState.maxHP = 40 + gameState.stats.vit * 2;
+            gameState.currentHP = gameState.maxHP;
+            showMessage(`ロール: ${jobName} をインストールしました。`, 4000);
+            updateStatusDisplay();
+        };
+
+        // キーダウンイベントリスナーを window に追加
+        window.addEventListener('keydown', (e) => {
+            // スタート画面が表示されている場合は、どのキーでもスタートさせる
+            if (!document.getElementById('start-screen').classList.contains('hidden')) {
+                window.startGame();
                 return;
             }
 
-            let actionType = null;
-            let title = '';
-
-            // 1日目の昼は投票できないようにする
-            const isFirstDayVote = (gameState.dayCount === 1 && gameState.status === 'day' && gameState.phase === 'vote');
-
-            if (gameState.status === 'day' && gameState.phase === 'vote' && !isFirstDayVote) {
-                actionType = 'vote';
-                title = '処刑対象に投票してください';
-            } else if (gameState.status === 'night' && gameState.phase === 'action') {
-                if (player.role === 'werewolf') {
-                    actionType = 'werewolf_attack';
-                    title = '襲撃対象を選んでください';
-                } else if (player.role === 'seer') {
-                    actionType = 'seer_predict';
-                    title = '占う対象を選んでください';
-                } else if (player.role === 'guard') {
-                    actionType = 'guard_protect';
-                    title = '守る対象を選んでください';
+            // メニュー操作
+            if (gameState.isMenuOpen) {
+                if (e.key === 'e' || e.key === 'E') {
+                    window.closeMenu();
+                    e.preventDefault();
                 }
-                // wolf_mate, baker, villager は夜の行動なし
-            }
-            
-            if (isFirstDayVote) {
-                 actionArea.classList.remove('hidden');
-                 actionTitle.textContent = '1日目の昼は投票できません。GMの指示を待ってください。';
-                 return;
-            }
-
-            if (!actionType) return;
-            
-            // 既に夜の行動を完了しているかチェック
-            const isNightActionComplete = (gameState.status === 'night' && gameState.phase === 'action' && gameState.nightActionsCompleted.includes(userId));
-            if (isNightActionComplete) {
-                actionArea.classList.remove('hidden');
-                actionTitle.textContent = '行動は完了しました。他の能力者の行動を待っています...';
                 return;
             }
-
-            actionArea.classList.remove('hidden');
-            actionTitle.textContent = title;
-
-            Object.entries(gameState.players).forEach(([pId, pData]) => {
-                // 投票は自分以外で生存している人、夜の行動も自分以外で生存している人
-                if (pId !== userId && pData.isAlive) {
-                    const button = document.createElement('button');
-                    button.className = 'px-4 py-2 bg-pink-600 text-white font-semibold rounded-lg hover:bg-pink-700 transition duration-150 gm-action-button';
-                    button.textContent = pData.name;
-                    button.addEventListener('click', () => submitAction(pId, actionType));
-                    actionTargetsContainer.appendChild(button);
+            
+            // オーバーワールド操作
+            if (gameState.mode === 'OVERWORLD') {
+                if (e.key === 'ArrowUp') { attemptMove(0, -1); e.preventDefault(); }
+                if (e.key === 'ArrowDown') { attemptMove(0, 1); e.preventDefault(); }
+                if (e.key === 'ArrowLeft') { attemptMove(-1, 0); e.preventDefault(); }
+                if (e.key === 'ArrowRight') { attemptMove(1, 0); e.preventDefault(); }
+                if (e.key === 'e' || e.key === 'E') { window.openMenu(); e.preventDefault(); }
+            } 
+            // バトル操作
+            else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
+                if (e.key === 'ArrowUp') {
+                    gameState.selectedCommand = Math.max(0, gameState.selectedCommand - 1);
+                    e.preventDefault();
                 }
-            });
-        }
-
-        /** 結果エリアの処理 */
-        function handleResultArea() {
-            resultArea.classList.add('hidden');
-            resultArea.innerHTML = ''; // コンテンツをクリア
-
-            if (gameState.status === 'finished') {
-                resultArea.classList.remove('hidden');
-                
-                const winnerIsVillagers = gameState.winner === 'villagers';
-                const winnerText = winnerIsVillagers ? '村人陣営' : '人狼陣営';
-                
-                const roleMap = getRoleMap();
-
-                // 勝利チームのプレイヤーを抽出
-                const winningPlayers = Object.values(gameState.players)
-                    .filter(p => roleMap[p.role]?.team === gameState.winner)
-                    .map(p => {
-                        // 役割名を取得
-                        const roleName = getRoleDisplayName(p.role);
-                        const status = p.isAlive ? ' (生存)' : ' (死亡)';
-                        return `${p.name} (${roleName}${status})`;
-                    })
-                    .join('、 ');
-                
-                const resultHtml = `
-                    <p class="text-xl font-extrabold text-center ${winnerIsVillagers ? 'text-green-300' : 'text-red-300'} mb-2">
-                        ゲーム終了！【${winnerText}】の勝利です！
-                    </p>
-                    <p class="text-base text-center text-gray-200">
-                        <span class="font-bold">勝利プレイヤー:</span>
-                        <br class="sm:hidden">
-                        ${winningPlayers}
-                    </p>
-                `;
-                
-                resultArea.innerHTML = resultHtml; 
-
-            } else if (gameState.phase === 'result' && gameState.eliminatedId) {
-                 resultArea.classList.remove('hidden');
-                 const eliminatedPlayer = gameState.players[gameState.eliminatedId];
-                 const roleName = getRoleDisplayName(eliminatedPlayer.role);
-                 
-                 const resultHtml = `
-                     <p class="text-lg font-bold text-center text-yellow-300">
-                         ${eliminatedPlayer.name} が追放されました。正体は【${roleName}】でした。
-                     </p>
-                 `;
-                 resultArea.innerHTML = resultHtml;
-            }
-        }
-
-        // =========================================================
-        // アクション実行 (チャット、投票、夜の行動)
-        // =========================================================
-
-        /** チャット送信 */
-        sendMessageButton.addEventListener('click', async () => {
-            const text = messageInput.value.trim();
-            if (text.length === 0 || gameState.status !== 'day' || gameState.phase !== 'discussion' || !gameState.players[userId]?.isAlive) return;
-
-            const newMessage = {
-                userId: userId,
-                name: gameState.players[userId].name,
-                text: text,
-                timestamp: Date.now()
-            };
-
-            try {
-                const gameRef = getGameDocRef(gameId);
-                await updateDoc(gameRef, {
-                    messages: arrayUnion(newMessage)
-                });
-                messageInput.value = '';
-            } catch (e) {
-                console.error("メッセージ送信エラー:", e);
+                if (e.key === 'ArrowDown') {
+                    gameState.selectedCommand = Math.min(COMBAT_COMMANDS.length - 1, gameState.selectedCommand + 1);
+                    e.preventDefault();
+                }
+                if (e.key === 'Enter') {
+                    executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
+                    e.preventDefault();
+                }
+                renderCombatMenu();
             }
         });
 
-        /** 投票・夜の行動の実行 */
-        async function submitAction(targetId, actionType) {
+        // --- Save/Load ---
+        window.saveGame = async function() {
+            if (!isAuthReady || !userId || !db || !gameState.isJobSelected) {
+                showMessage("エラー: 認証またはロール選択が未完了です。", 3000);
+                return;
+            }
             try {
-                const gameRef = getGameDocRef(gameId);
-                await runTransaction(db, async (transaction) => {
-                    const gameDoc = await transaction.get(gameRef);
-                    if (!gameDoc.exists()) return;
-                    const currentData = gameDoc.data();
-
-                    const player = currentData.players[userId];
-                    if (!player || !player.isAlive || (currentData.nightActionsCompleted && currentData.nightActionsCompleted.includes(userId))) return;
-
-                    let updateFields = {};
-                    let isPublicMessage = true; 
-                    
-                    // 1日目の昼は投票アクションを受け付けない
-                    const isFirstDayVoteAttempt = (currentData.dayCount === 1 && currentData.status === 'day' && actionType === 'vote');
-                    if (isFirstDayVoteAttempt) {
-                        console.log("1日目の昼は投票できません。");
-                        return;
-                    }
-
-
-                    if (actionType === 'vote' && currentData.status === 'day' && currentData.phase === 'vote') {
-                        // 投票ロジック
-                        updateFields.lastActionTarget = targetId;
-                        updateFields.systemMessageText = `${player.name} が投票を完了しました。`;
-                        isPublicMessage = true;
-
-                    } else if (actionType === 'werewolf_attack' && player.role === 'werewolf' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 人狼の襲撃
-                        updateFields.werewolfTarget = targetId;
-                        updateFields.nightActionsCompleted = arrayUnion(userId);
-                        showModal('人狼の襲撃', `${currentData.players[targetId].name} を襲撃対象として決定しました。他の人狼の行動、または朝を待ってください。`);
-                        isPublicMessage = false; 
-                        
-                    } else if (actionType === 'seer_predict' && player.role === 'seer' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 占い師の占い
-                        const targetPlayer = currentData.players[targetId];
-                        const isWerewolfTeam = targetPlayer.role === 'werewolf' || targetPlayer.role === 'wolf_mate'; // 人狼の相棒も人狼陣営として占われる
-                        const result = isWerewolfTeam ? '人狼' : '人狼ではない';
-                        
-                        showModal('占い結果', `${targetPlayer.name} の正体は【${result}】でした。`);
-                        
-                        updateFields.nightActionsCompleted = arrayUnion(userId);
-                        isPublicMessage = false; 
-                    
-                    } else if (actionType === 'guard_protect' && player.role === 'guard' && currentData.status === 'night' && currentData.phase === 'action') {
-                        // 騎士の護衛
-                        showModal('騎士の護衛', `${currentData.players[targetId].name} を護衛対象として決定しました。朝を待ってください。`);
-                        
-                        updateFields.guardTarget = targetId;
-                        updateFields.nightActionsCompleted = arrayUnion(userId);
-                        isPublicMessage = false; 
-
-                    } else {
-                        throw new Error('無効なアクションです。');
-                    }
-
-                    // チャットに追加するのは公開メッセージの場合のみ
-                    const updateObj = {
-                         nightActionsCompleted: updateFields.nightActionsCompleted || currentData.nightActionsCompleted,
-                         werewolfTarget: updateFields.werewolfTarget !== undefined ? updateFields.werewolfTarget : currentData.werewolfTarget,
-                         guardTarget: updateFields.guardTarget !== undefined ? updateFields.guardTarget : currentData.guardTarget,
-                         lastActionTarget: updateFields.lastActionTarget !== undefined ? updateFields.lastActionTarget : currentData.lastActionTarget,
-                    };
-                    
-                    if (isPublicMessage && updateFields.systemMessageText) {
-                        const newMessage = {
-                            userId: 'system',
-                            name: 'システム',
-                            text: updateFields.systemMessageText,
-                            timestamp: Date.now()
-                        };
-                        updateObj.messages = arrayUnion(newMessage);
-                    }
-                    
-                    transaction.update(gameRef, updateObj);
-                });
-                console.log('アクションが完了しました。');
-            } catch (e) {
-                console.error("アクション実行エラー:", e.message);
+                const saveState = { 
+                    x: gameState.x, y: gameState.y, level: gameState.level, job: gameState.job,
+                    exp: gameState.exp, maxHP: gameState.maxHP, currentHP: gameState.currentHP,
+                    stats: gameState.stats, pikmonParty: gameState.pikmonParty, 
+                    isJobSelected: gameState.isJobSelected, eventFlags: gameState.eventFlags
+                };
+                await window.setDoc(window.doc(db, USER_DOC_PATH(userId)), saveState);
+                showMessage("システム状態をバックアップしました。", 3000);
+            } catch (error) {
+                console.error("Save error:", error);
+                showMessage("バックアップに失敗しました。", 3000);
             }
-        }
+        };
 
-
-        // =========================================================
-        // GMアクション & 自動遷移ロジック
-        // =========================================================
-
-        /** 勝利判定 */
-        function checkWinCondition(players) {
-            const roleMap = getRoleMap();
-            
-            const alivePlayers = Object.values(players).filter(p => p.isAlive);
-            
-            // 人狼陣営 (werewolf, wolf_mate)
-            const aliveWerewolvesTeam = alivePlayers.filter(p => roleMap[p.role]?.team === 'werewolves').length;
-            // 村人陣営 (villager, seer, guard, baker)
-            const aliveVillagersTeam = alivePlayers.filter(p => roleMap[p.role]?.team === 'villagers').length;
-
-            if (aliveWerewolvesTeam === 0) {
-                return 'villagers'; // 人狼陣営が全滅
-            }
-            if (aliveWerewolvesTeam >= aliveVillagersTeam) {
-                return 'werewolves'; // 人狼陣営の数が村人陣営の数以上
-            }
-            return null; // 決着せず
-        }
-        
-        /** 自動フェーズ遷移のチェック（夜の能力者行動完了時） */
-        async function checkAutoPhaseTransition(currentData, gameRef) {
-            if (currentData.status !== 'night' || currentData.phase !== 'action' || currentData.hostId !== userId) return;
-
-            // プレイヤーオブジェクトをID付きで取得
-            const alivePlayers = Object.entries(currentData.players)
-                .filter(([, pData]) => pData.isAlive)
-                .map(([pId, pData]) => ({ id: pId, ...pData }));
-
-            // 行動が必要な能力者のIDリスト (werewolf, seer, guard)
-            const requiredActionPlayerIds = alivePlayers
-                .filter(p => REQUIRED_NIGHT_ROLES.includes(p.role))
-                .map(p => p.id);
-
-            // 行動完了した能力者IDのSet
-            const completedSet = new Set(currentData.nightActionsCompleted || []);
-
-            // 実際に行動が必要なプレイヤーのうち、行動を完了した人数
-            const completedCount = requiredActionPlayerIds.filter(id => completedSet.has(id)).length;
-
-            if (requiredActionPlayerIds.length > 0 && completedCount >= requiredActionPlayerIds.length) {
-                console.log("全能力者の行動が完了しました。自動で次のフェーズへ移行します...");
-                // 自動遷移実行
-                await proceedToNextPhase(currentData, gameRef);
-            }
-        }
-
-        /** フェーズ進行処理 (手動・自動共通) */
-        async function proceedToNextPhase(currentData, gameRef) {
-            let nextStatus = currentData.status;
-            let nextPhase = currentData.phase;
-            let nextDayCount = currentData.dayCount;
-            let eliminatedId = currentData.eliminatedId;
-            let winner = checkWinCondition(currentData.players);
-            let systemMessageText = '';
-            let newPlayers = { ...currentData.players };
-
-            if (winner) {
-                nextStatus = 'finished';
-                systemMessageText = `ゲーム終了！${winner === 'werewolves' ? '人狼' : '村人'}陣営の勝利です！`;
-            } else if (currentData.status === 'day' && currentData.phase === 'discussion') {
-                if (currentData.dayCount === 1) {
-                    // 1日目の議論 -> 夜 (投票なし)
-                    nextStatus = 'night';
-                    nextPhase = 'action';
-                    systemMessageText = '1日目の昼は投票なしで終了します。夜になりました。能力者は行動を選択してください。';
-                } else {
-                    // 2日目以降の議論 -> 投票
-                    nextPhase = 'vote';
-                    systemMessageText = '議論終了！処刑対象に投票してください。';
-                }
-            } else if (currentData.status === 'day' && currentData.phase === 'vote') {
-                // 投票 -> 投票結果発表
-                nextPhase = 'result';
-                
-                eliminatedId = currentData.lastActionTarget;
-                
-                if (eliminatedId && newPlayers[eliminatedId]) {
-                    const eliminatedPlayer = newPlayers[eliminatedId];
-                    const roleName = getRoleDisplayName(eliminatedPlayer.role);
-                    
-                    eliminatedPlayer.isAlive = false;
-                    systemMessageText = `${eliminatedPlayer.name} が追放されました。正体は【${roleName}】でした。`;
-
-                    // ★ 人狼の相棒 (wolf_mate) の道連れロジック ★
-                    if (eliminatedPlayer.role === 'wolf_mate') {
-                        const alivePlayerIds = Object.entries(newPlayers)
-                            .filter(([id, data]) => data.isAlive && id !== eliminatedId)
-                            .map(([id]) => id);
-                        
-                        if (alivePlayerIds.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * alivePlayerIds.length);
-                            const dochoPlayerId = alivePlayerIds[randomIndex];
-                            const dochoPlayer = newPlayers[dochoPlayerId];
-                            
-                            dochoPlayer.isAlive = false;
-                            systemMessageText += `\n【人狼の相棒の道連れ能力発動！】 ${dochoPlayer.name} が犠牲になりました。`;
-                        } else {
-                             systemMessageText += `\n【人狼の相棒の道連れ能力発動！】しかし、他に生存者がいないため能力は空振りに終わりました。`;
-                        }
-                    }
-                    // ★ ロジック終わり ★
-
-                } else {
-                    systemMessageText = '追放者はいませんでした (同数票など)。';
-                }
-            } else if (currentData.status === 'day' && currentData.phase === 'result') {
-                // 結果発表 -> 夜
-                winner = checkWinCondition(newPlayers);
-                if (winner) {
-                    nextStatus = 'finished';
-                    systemMessageText = `ゲーム終了！${winner === 'werewolves' ? '人狼' : '村人'}陣営の勝利です！`;
-                } else {
-                    nextStatus = 'night';
-                    nextPhase = 'action';
-                    // nextDayCount は夜明けの時にインクリメントされるためここではしない
-                    systemMessageText = `${currentData.dayCount}日目の夜になりました。能力者は行動を選択してください。`;
-                }
-            } else if (currentData.status === 'night' && currentData.phase === 'action') {
-                // 夜の行動 -> 翌日の議論
-                nextStatus = 'day';
-                nextPhase = 'discussion';
-                nextDayCount++; // 日数をインクリメント
-                
-                // ★夜の行動結果を判定★
-                const wTarget = currentData.werewolfTarget;
-                const gTarget = currentData.guardTarget;
-                eliminatedId = null; 
-                let nightResultText = '';
-
-                if (wTarget) {
-                    if (wTarget === gTarget) {
-                        // 騎士が護衛成功
-                        nightResultText = `${newPlayers[wTarget].name} が襲撃されましたが、護衛されていたため犠牲者は出ませんでした。`;
-                    } else {
-                        // 騎士の護衛失敗または護衛なし
-                        eliminatedId = wTarget;
-                        if (newPlayers[eliminatedId]) {
-                            newPlayers[eliminatedId].isAlive = false;
-                            nightResultText = `夜の間に ${newPlayers[eliminatedId].name} が犠牲になりました。`;
-                        }
-                    }
-                } else {
-                    // 人狼がターゲットを選択しなかった場合
-                    nightResultText = `犠牲者はいませんでした。`;
-                }
-
-                // ★ パン屋のメッセージを追加 ★
-                const bakerAlive = Object.values(newPlayers).some(p => p.role === 'baker' && p.isAlive);
-                let bakerMessage = '';
-                if (bakerAlive) {
-                    bakerMessage = '村中にパンが焼けるいい匂いが漂っています。今日も平和な一日になりそうです。';
-                }
-
-                systemMessageText = `${nextDayCount}日目の朝です。${nightResultText} ${bakerMessage}`;
-                
-                // 夜の行動後に再度勝利判定
-                winner = checkWinCondition(newPlayers);
-                if (winner) {
-                    nextStatus = 'finished';
-                    systemMessageText = `ゲーム終了！${winner === 'werewolves' ? '人狼' : '村人'}陣営の勝利です！`;
-                } else if (nextStatus === 'day') {
-                    systemMessageText += '議論を開始してください。';
-                }
-
-            } else {
-                return; // 想定外の遷移
-            }
-
-            const newMessage = {
-                userId: 'system',
-                name: 'システム',
-                text: systemMessageText,
-                timestamp: Date.now()
-            };
-
-            const updateData = {
-                status: nextStatus,
-                phase: nextPhase,
-                dayCount: nextDayCount,
-                eliminatedId: eliminatedId,
-                lastActionTarget: null, 
-                werewolfTarget: null, 
-                guardTarget: null,    
-                messages: arrayUnion(newMessage),
-                players: newPlayers,
-                winner: winner,
-                nightActionsCompleted: [], // 夜が明けるときにリセット
-            };
-
+        async function loadGame() {
+            if (!isAuthReady || !userId || !db) return;
             try {
-                await updateDoc(gameRef, updateData);
-            } catch (e) {
-                console.error("フェーズ進行エラー:", e);
-            }
-        }
-        
-        /** ゲーム開始 */
-        startGameButton.addEventListener('click', async () => {
-            if (gameState.status !== 'lobby' || gameState.hostId !== userId) return;
-            const playerCount = Object.keys(gameState.players).length;
-            if (playerCount < 3) { console.error('ゲーム開始には最低3人のプレイヤーが必要です。'); return; }
-
-            const newPlayers = assignRoles(gameState.players);
-
-            const initialMessage = {
-                userId: 'system',
-                name: 'システム',
-                text: `ゲームが開始されました！役割が配られました。昼のターンです（1日目）。`,
-                timestamp: Date.now()
-            };
-
-            try {
-                const gameRef = getGameDocRef(gameId);
-                await updateDoc(gameRef, {
-                    status: 'day',
-                    phase: 'discussion',
-                    dayCount: 1,
-                    players: newPlayers,
-                    messages: arrayUnion(initialMessage),
-                    winner: null,
-                    werewolfTarget: null,
-                    guardTarget: null,
-                    nightActionsCompleted: [],
-                });
-            } catch (e) {
-                console.error("ゲーム開始エラー:", e);
-            }
-        });
-
-        /** 役割のランダム割り当て (wolf_mateとbakerを追加) */
-        function assignRoles(players) {
-            const playerIds = Object.keys(players);
-            const playerCount = playerIds.length;
-            let roles = [];
-            
-            // 基本役職
-            roles.push('werewolf', 'seer');
-            if (playerCount >= 4) {
-                roles.push('guard');
-            }
-
-            // プレイヤー数による特殊役職の追加
-            if (playerCount === 5) {
-                // 5人時はパン屋を追加 (人狼1, 占い1, 騎士1, パン屋1)
-                roles.push('baker');
-            } else if (playerCount >= 6) {
-                // 6人以上時は人狼の相棒を追加 (人狼1, 占い1, 騎士1, 相棒1)
-                roles.push('wolf_mate');
-            }
-
-            // 残りを村人にする
-            const requiredVillagers = playerCount - roles.length;
-            for (let i = 0; i < requiredVillagers; i++) {
-                roles.push('villager');
-            }
-            
-            // 役割数が不足していた場合の緊急処理
-            if (roles.length < playerCount) {
-                while(roles.length < playerCount) {
-                    roles.push('villager');
+                const snap = await window.getDoc(window.doc(db, USER_DOC_PATH(userId)));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    Object.assign(gameState, data);
+                    gameState.mode = 'OVERWORLD';
+                    showMessage("バックアップから復元しました。", 4000);
+                } else {
+                    setTimeout(() => {
+                         showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000);
+                    }, 1000);
                 }
+            } catch (error) {
+                console.error("Load error:", error);
             }
-
-
-            // シャッフル
-            for (let i = roles.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [roles[i], roles[j]] = [roles[j], roles[i]];
-            }
-
-            const newPlayers = { ...players };
-            playerIds.forEach((id, index) => {
-                newPlayers[id] = { ...newPlayers[id], role: roles[index], isAlive: true };
-            });
-            return newPlayers;
+            initGame();
         }
 
-        /** 次のフェーズへ (GM手動操作) */
-        nextPhaseButton.addEventListener('click', async () => {
-            if (gameState.hostId !== userId) return;
-            // 手動遷移は現在のゲームステートを引数にして実行
-            await proceedToNextPhase(gameState, getGameDocRef(gameId));
-        });
-
-        /** ゲームリセット (GM操作) */
-        resetGameButton.addEventListener('click', async () => {
-            if (gameState.hostId !== userId) return;
-            // アラートの代わりにモーダルを使うべきですが、GM操作なのでここでは一時的に console.log で代用します
-            console.log('ゲームをリセット（削除）します。');
-
-            try {
-                await deleteDoc(getGameDocRef(gameId));
-                console.log('ゲームをリセットしました。');
-                gameId = '';
-                localStorage.removeItem('werewolf_game_id');
-                if (unsubscribe) unsubscribe();
-                resetUI();
-            } catch (e) {
-                console.error("ゲームリセットエラー:", e);
-            }
-        });
-
-        /** UIをロビー状態に戻す */
-        function resetUI() {
-            lobbyArea.classList.remove('hidden');
-            gameArea.classList.add('hidden');
-            gameTitle.textContent = 'ゲームID: ';
-            gameStatusDisplay.textContent = 'ロビー';
-            yourRoleDisplay.textContent = '';
-            roleDescription.textContent = '';
-            gmActionsArea.classList.add('hidden');
-            actionArea.classList.add('hidden');
-            resultArea.classList.add('hidden');
-            playerListContainer.innerHTML = '';
-            chatMessagesContainer.innerHTML = '';
-            gameState = { status: 'uninitialized', phase: 'waiting', dayCount: 0, hostId: null, players: {}, messages: [], werewolfTarget: null, guardTarget: null, lastActionTarget: null, eliminatedId: null, winner: null, nightActionsCompleted: [] };
-        }
+        window.onload = function() {
+            initFirebase();
+        };
     </script>
 </body>
 </html>
