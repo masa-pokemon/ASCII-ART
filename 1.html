@@ -1,183 +1,227 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ASCII Art Generator + PDF Export</title>
-  <style>
-    body {
-      font-family: monospace;
-      background: #222;
-      color: #ddd;
-      padding: 20px;
-    }
-    #ascii {
-      white-space: pre;
-      line-height: 7px;
-      font-size: 7px;
-      letter-spacing: 2px;
-      background: #000;
-      padding: 10px;
-      display: inline-block;
-    }
-    input, button {
-      margin: 0 5px 10px 0;
-    }
-  </style>
-
-  <!-- jsPDFライブラリの読み込み -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像スライサーと横連結（ダウンロード機能付き）</title>
+    <!-- Tailwind CSSを読み込み、レスポンシブでモダンなデザインを適用します -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* フォント設定 */
+        body { font-family: 'Inter', sans-serif; }
+        /* スライスされた画像が横に並ぶように設定（隙間防止） */
+        #row-container img {
+            display: block;
+        }
+        /* 横連結された画像がはみ出してもスクロールできるように */
+        #row-container {
+            overflow-x: auto;
+            white-space: nowrap; /* 画像が折り返さないように */
+        }
+    </style>
 </head>
-<body>
-  <h1>ASCII Art Generator</h1>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
 
-  <input type="file" id="imgFile" accept="image/*" />
-  <br />
-  <button id="generate">生成</button>
-  <button id="copy">文字をコピー</button>
-  <button id="saveImg" disabled>PDFとして保存</button>
+    <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-extrabold text-indigo-700 mb-4 border-b-2 pb-2">
+            画像を32px高でスライスして横一列に連結
+        </h1>
+        <p class="text-gray-600 mb-6">
+            画像ファイルをアップロードしてください。画像は**32ピクセル高**の水平ストリップに分割され、**横一列**に連結されて表示されます。
+        </p>
 
-  <pre id="ascii"></pre>
+        <!-- 画像アップロードと処理エリア -->
+        <div class="space-y-4 mb-8">
+            <input type="file" id="imageInput" accept="image/*" class="w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-indigo-50 file:text-indigo-700
+                hover:file:bg-indigo-100
+                cursor-pointer"
+            >
+            <button id="processButton"
+                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-50"
+                disabled
+            >
+                画像を処理してスライス・連結する
+            </button>
+        </div>
 
-  <script>
-    const chars = "MWN$@%#&B89EGA6mK5HRkbYT43V0JL7gpaseyxznocv?jIftr1li*=-~^`':;,. ";
-    const imgFile = document.getElementById("imgFile");
-    const generateBtn = document.getElementById("generate");
-    const saveBtn = document.getElementById("saveImg");
-    const copyBtn = document.getElementById("copy");
-    const asciiPre = document.getElementById("ascii");
+        <!-- ダウンロードボタンの追加 -->
+        <div id="downloadArea" class="hidden mb-6">
+            <a id="downloadLink" href="#" download="combined_horizontal_image.png"
+               class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-150 ease-in-out block text-center">
+                ↓ 連結された画像をダウンロード (.png)
+            </a>
+        </div>
 
-    let img = new Image();
-    let currentAscii = "";
-    let currentWidth = 0;
-    let currentHeight = 0;
+        <!-- 処理結果の表示エリア -->
+        <div id="outputContainer" class="mt-8 border-t pt-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                処理結果（横連結）
+            </h2>
+            <p class="text-gray-500" id="initialMessage">
+                ここにスライスされた画像が表示されます。
+            </p>
+        </div>
 
-    img.crossOrigin = "anonymous";
+    </div>
 
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(currentAscii)
-        .then(() => alert("コピーしました"))
-        .catch((err) => alert("コピーに失敗しました: " + err));
-    });
-
-    imgFile.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      img.src = url;
-    });
-
-    generateBtn.addEventListener("click", () => {
-      if (!img.src) {
-        alert("画像をアップロードしてください");
-        return;
-      }
-
-      const width = img.width;
-      const height = img.height;
-      currentWidth = width;
-      currentHeight = height;
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = width;
-      canvas.height = height;
-
-      ctx.drawImage(img, 0, 0, width, height);
-
-      const imgData = ctx.getImageData(0, 0, width, height);
-      const data = imgData.data;
-
-      let ascii = "";
-
-      // 画像のピクセル数に基づいて文字を変換
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const offset = (y * width + x) * 4;
-          const r = data[offset];
-          const g = data[offset + 1];
-          const b = data[offset + 2];
-          const avg = (r + g + b) / 3;
-
-          // 色の明るさに基づいて文字を選ぶ
-          const charIndex = Math.floor((avg / 255) * (chars.length - 1));
-          ascii += chars.charAt(chars.length - 1 - charIndex); // 明るい部分は細かい文字
-        }
-        ascii += "\n";
-      }
-
-      currentAscii = ascii;
-      asciiPre.textContent = ascii;
-      saveBtn.disabled = false;
-    });
-
-    saveBtn.addEventListener("click", () => {
-      if (!currentAscii) return;
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'pt',
-        format: 'a4'
-      });
-
-      const margin = 40;
-      const pageWidth = doc.internal.pageSize.width - margin * 2;
-      const pageHeight = doc.internal.pageSize.height - margin * 2;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = currentWidth;
-      canvas.height = currentHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
-      const imgData = ctx.getImageData(0, 0, currentWidth, currentHeight).data;
-
-      const lines = currentAscii.split('\n');
-      const maxLineLength = Math.max(...lines.map(line => line.length));
-      const totalLines = lines.length;
-
-      const approxCharWidth = pageWidth / maxLineLength;
-      const approxLineHeight = pageHeight / totalLines;
-      const fontSize = Math.min(approxCharWidth * 1.6, approxLineHeight * 0.9);
-      const charWidth = fontSize * 0.6;
-      const lineHeight = fontSize * 0.6;
-
-      doc.setFont('Courier', 'normal');
-      doc.setFontSize(fontSize);
-      let startY = (pageHeight - totalLines * lineHeight) / 2;
-
-      for (let y = 0; y < totalLines; y++) {
-        const line = lines[y];
-        if (startY > pageHeight + margin) {
-          doc.addPage();
-          
-          startY = margin + (pageHeight - lineHeight) / 2;
-        }
-
-        // 行の中央揃えのための X 開始位置を計算
-        const lineWidth = line.length * charWidth;
-        const startX = margin + (pageWidth - lineWidth) / 2;
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const processButton = document.getElementById('processButton');
+        const outputContainer = document.getElementById('outputContainer');
+        const initialMessage = document.getElementById('initialMessage');
+        const downloadArea = document.getElementById('downloadArea');
+        const downloadLink = document.getElementById('downloadLink');
         
+        // 32ピクセル高でスライスします
+        const SLICE_HEIGHT = 32; 
+        
+        let loadedImage = null; // ロードされた画像を保持する変数
 
-        for (let x = 0; x < line.length; x++) {
-          const char = line.charAt(x);
+        // 1. ファイル選択時のイベントリスナー
+        imageInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                processButton.disabled = true;
+                downloadArea.classList.add('hidden');
+                return;
+            }
 
-          const px = x;
-          const py = y;
-          const offset = (py * currentWidth + px) * 4;
-          const r = imgData[offset];
-          const g = imgData[offset + 1];
-          const b = imgData[offset + 2];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    loadedImage = img; // 画像を保存
+                    processButton.disabled = false;
+                    initialMessage.textContent = `「${file.name}」がロードされました。処理ボタンを押して開始してください。`;
+                    downloadArea.classList.add('hidden');
+                };
+                img.onerror = () => {
+                    console.error("画像の読み込みに失敗しました。");
+                    initialMessage.textContent = "エラー: 画像の読み込みに失敗しました。";
+                    processButton.disabled = true;
+                    downloadArea.classList.add('hidden');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
 
-          doc.setTextColor(r, g, b);
-          doc.text(char, startX + x * charWidth, startY);
-        }
+        // 2. 処理ボタンクリック時のイベントリスナー
+        processButton.addEventListener('click', () => {
+            if (loadedImage) {
+                sliceAndDisplay(loadedImage, outputContainer);
+            } else {
+                initialMessage.textContent = "エラー: 処理する画像がロードされていません。";
+            }
+        });
 
-        startY += lineHeight;
-      }
-      doc.save("ascii-art-color.pdf");
-    });
-  </script>
+        /**
+         * 画像を32px高で水平にスライスし、結果を横に連結してHTMLに出力し、ダウンロードリンクを設定する。
+         * @param {HTMLImageElement} img - ロードされた画像要素
+         * @param {HTMLElement} container - 結果を表示するDOMコンテナ
+         */
+        const sliceAndDisplay = (img, container) => {
+            // ローディングメッセージを表示
+            initialMessage.textContent = '画像を処理中...';
+            initialMessage.className = 'text-lg font-medium text-gray-500 animate-pulse';
+            downloadArea.classList.add('hidden');
+            
+            // 既存の内容をクリア
+            const existingRow = document.getElementById('row-container');
+            if (existingRow) existingRow.remove();
+
+            // スライス数を画像の高さに基づいて計算
+            const numSlices = Math.ceil(img.height / SLICE_HEIGHT);
+            const slices = []; // スライスされたCanvasを格納する配列
+            let combinedWidth = 0;  // 横連結なので幅は合計
+            let combinedHeight = 0; // 横連結なので高さは最大値 (32px)
+
+            // 3. Canvasを使ってスライス処理を実行し、slices配列に格納
+            for (let i = 0; i < numSlices; i++) {
+                const y = i * SLICE_HEIGHT;
+                // 最後のスライスは端数になる可能性があるため、高さを調整
+                const currentSliceHeight = Math.min(SLICE_HEIGHT, img.height - y);
+                
+                // スライス用のキャンバスを作成
+                const sliceCanvas = document.createElement('canvas');
+                const sliceCtx = sliceCanvas.getContext('2d');
+                sliceCanvas.width = img.width;          // 幅は元の画像の幅全体
+                sliceCanvas.height = currentSliceHeight; // 高さが32px（または端数）
+
+                // 元の画像をキャンバスに描画し、指定領域を切り出す (水平スライス)
+                sliceCtx.drawImage(
+                    img,
+                    0, y, img.width, currentSliceHeight, // 元の画像 (ソースのX, Y, 幅, 高さ)
+                    0, 0, img.width, currentSliceHeight  // 新しい画像 (デスティネーションのX, Y, 幅, 高さ)
+                );
+
+                slices.push(sliceCanvas);
+                
+                // 結合画像のサイズを計算 (横に連結するので、幅はスライスの幅の合計)
+                combinedWidth += img.width; // 各スライスの幅を合計
+                // 結合画像の高さは、最も高いスライス（通常32px）
+                combinedHeight = Math.max(combinedHeight, currentSliceHeight); 
+            }
+
+            // --- 横連結された単一画像の生成 (ダウンロード用) ---
+            const combinedCanvas = document.createElement('canvas');
+            const combinedCtx = combinedCanvas.getContext('2d');
+            combinedCanvas.width = combinedWidth;
+            combinedCanvas.height = combinedHeight;
+            
+            let currentX = 0; // 横に描画していくためX座標を使用
+            const rowContainer = document.createElement('div');
+            rowContainer.id = 'row-container';
+            // Flexboxで子要素を横一列に並べる (flex-row)
+            rowContainer.className = 'flex flex-row flex-nowrap overflow-x-auto border-4 border-dashed border-indigo-400 p-2 shadow-xl bg-gray-900 mt-4';
+            
+            // 4. 各スライスを結合Canvasと表示用コンテナに追加
+            slices.forEach((sliceCanvas, index) => {
+                // 結合Canvasにスライスを描画
+                combinedCtx.drawImage(sliceCanvas, currentX, 0);
+                currentX += sliceCanvas.width; // X座標をスライス幅分進める
+
+                // 表示用の画像要素を作成
+                const sliceDataUrl = sliceCanvas.toDataURL('image/png');
+                const sliceImg = document.createElement('img');
+                sliceImg.src = sliceDataUrl;
+                sliceImg.title = `${index+1}番目のスライス (${sliceCanvas.width}x${sliceCanvas.height}px)`;
+                sliceImg.className = 'block shadow-md mr-1'; // 横に並べるため右にマージン
+
+                rowContainer.appendChild(sliceImg);
+            });
+
+
+            // 5. ダウンロードリンクの設定
+            const combinedDataUrl = combinedCanvas.toDataURL('image/png');
+            downloadLink.href = combinedDataUrl;
+            downloadArea.classList.remove('hidden');
+
+            // 6. 結果メッセージとコンテナを表示
+            initialMessage.textContent = `✅ ${numSlices}個の水平スライスが横一列に連結されました。結合サイズ: ${combinedWidth}x${combinedHeight}ピクセル`;
+            initialMessage.className = 'mt-4 text-lg font-medium text-green-700';
+
+            // 元の画像を表示するセクション (比較用)
+            const originalDiv = document.createElement('div');
+            originalDiv.className = 'mb-6 p-4 border-b pb-4';
+            originalDiv.innerHTML = `<h3 class="text-xl font-semibold mb-2 text-gray-700">元の画像 (${img.width}x${img.height}px)</h3>`;
+            const originalImg = img.cloneNode();
+            originalImg.className = 'w-full h-auto rounded-lg shadow-md max-w-full';
+            originalDiv.appendChild(originalImg);
+
+            // outputContainerの子要素を再構成
+            container.innerHTML = '';
+            container.appendChild(originalDiv);
+            container.appendChild(initialMessage);
+            container.appendChild(rowContainer);
+
+            // 横に繋がったスライス画像をユーザーが確認しやすいように自動スクロール
+            rowContainer.scrollLeft = 0;
+        };
+    </script>
 </body>
 </html>
