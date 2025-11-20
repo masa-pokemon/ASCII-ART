@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZeiJack Quest I - Skill Evolution</title>
+    <title>ZeiJack Quest II - Debugger Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -232,11 +232,10 @@
     <script>
         // --- 定数定義 ---
         const TILE_SIZE = 32;
-        const CANVAS_SIZE = 512; // 16x16 tiles view
-        const VIEW_COLS = CANVAS_SIZE / TILE_SIZE; // 16
-        const VIEW_ROWS = CANVAS_SIZE / TILE_SIZE; // 16
+        const CANVAS_SIZE = 512; 
+        const VIEW_COLS = CANVAS_SIZE / TILE_SIZE; 
+        const VIEW_ROWS = CANVAS_SIZE / TILE_SIZE; 
         
-        // マップ全体のサイズ（拡張）
         const MAP_COLS = 40; 
         const MAP_ROWS = 40;
         
@@ -254,19 +253,14 @@
             const c = document.createElement('canvas');
             c.width = 320; c.height = 32;
             const cx = c.getContext('2d');
-            // 0: Ground
             cx.fillStyle = '#1e293b'; cx.fillRect(0, 0, 32, 32);
             cx.strokeStyle = '#334155'; cx.lineWidth = 2; cx.strokeRect(2, 2, 28, 28);
-            // 1: Wall
             cx.fillStyle = '#475569'; cx.fillRect(32, 0, 32, 32);
             cx.fillStyle = '#64748b'; cx.fillRect(36, 4, 24, 24);
-            // 2: Grass (Data)
             cx.fillStyle = '#0f766e'; cx.fillRect(64, 0, 32, 32);
             cx.fillStyle = '#2dd4bf'; cx.fillRect(68, 8, 4, 4); cx.fillRect(80, 20, 4, 4); cx.fillRect(88, 6, 2, 8);
-            // 8: Boss
             cx.fillStyle = '#7f1d1d'; cx.fillRect(256, 0, 32, 32);
             cx.fillStyle = '#ef4444'; cx.font = 'bold 20px monospace'; cx.fillText('!', 266, 24);
-            // 9: Start
             cx.fillStyle = '#1e293b'; cx.fillRect(288, 0, 32, 32);
             cx.fillStyle = '#3b82f6'; cx.font = 'bold 20px monospace'; cx.fillText('S', 296, 24);
             return c.toDataURL();
@@ -275,7 +269,6 @@
         let tilesetImage = new Image();
         let isTilesetLoaded = false;
 
-        // マップデータ (自動生成)
         let gameMap = [];
 
         function generateMap() {
@@ -283,11 +276,9 @@
             for (let y = 0; y < MAP_ROWS; y++) {
                 const row = [];
                 for (let x = 0; x < MAP_COLS; x++) {
-                    // 外周は壁
                     if (x === 0 || x === MAP_COLS - 1 || y === 0 || y === MAP_ROWS - 1) {
                         row.push(TILE_WALL);
                     } else {
-                        // ランダム生成
                         const r = Math.random();
                         if (r < 0.1) row.push(TILE_WALL);
                         else if (r < 0.25) row.push(TILE_GRASS);
@@ -296,19 +287,15 @@
                 }
                 map.push(row);
             }
-            // 固定イベント地点
             map[2][2] = TILE_START;
             map[MAP_ROWS - 3][MAP_COLS - 3] = TILE_BOSS;
             return map;
         }
 
         // --- スキル・職業定義 ---
-        
-        // スキルマスターに必要な経験値
         const MASTERY_EXP = 100;
-        const SKILL_EXP_GAIN = 20; // 1回使うごとに増える量
+        const SKILL_EXP_GAIN = 25; 
 
-        // スキルデータベース (定義)
         const SKILL_DEFINITIONS = {
             // 基本攻撃系
             'パケット攻撃': { mp: 0, type: 'dmg', power: 1.0, desc: '通常攻撃' },
@@ -329,16 +316,40 @@
             'ヒールコード': { mp: 5, type: 'heal', power: 0.5, desc: 'HP中回復', evolution: 'リファクタリング' },
             'リファクタリング': { mp: 15, type: 'heal', power: 1.0, desc: 'HP全回復' },
 
+            // 敵ラーニングスキル (デバッガー用)
+            'スクリプト埋込': { mp: 6, type: 'dmg', power: 1.5, desc: '対象内部から攻撃', evolution: 'クロスサイト・ストーム' },
+            'クロスサイト・ストーム': { mp: 14, type: 'dmg', power: 2.5, desc: '拡散するスクリプト攻撃' },
+            'DROP TABLE': { mp: 12, type: 'dmg', power: 2.5, desc: 'DB破壊攻撃', evolution: 'DB完全消去' },
+            'DB完全消去': { mp: 24, type: 'dmg', power: 3.5, desc: '全てを無に帰す一撃' },
+            '総当たり攻撃': { mp: 5, type: 'dmg', power: 1.3, desc: '連続攻撃' },
+            'なりすまし': { mp: 5, type: 'heal', power: 0.3, desc: '欺いて回復' },
+            '再送要求': { mp: 3, type: 'heal', power: 0.2, desc: '小回復' },
+            'ボトルネック': { mp: 4, type: 'dmg', power: 1.4, desc: '通信阻害攻撃' },
+            'ゼロデイ': { mp: 8, type: 'dmg', power: 1.9, desc: '未知の攻撃', evolution: 'ゼロデイ・エクスプロイト' },
+            '権限昇格': { mp: 20, type: 'dmg', power: 3.5, desc: 'Root権限攻撃' },
+
             // 上位・合成スキル
             '論理爆弾': { mp: 15, type: 'dmg', power: 2.5, desc: '条件を満たすと爆発する罠' },
             'サージストーム': { mp: 25, type: 'dmg', power: 3.5, desc: '【合成】電気的嵐による全体攻撃' },
-            'ゼロデイ・エクスプロイト': { mp: 30, type: 'dmg', power: 4.0, desc: '【合成】防御不可能な未知の攻撃' },
+            'ゼロデイ・エクスプロイト': { mp: 30, type: 'dmg', power: 4.0, desc: '【合成/進化】防御不可能な未知の攻撃' },
             '完全修復プロトコル': { mp: 40, type: 'heal', power: 1.0, desc: '【合成】全てを元通りにする奇跡' },
             'ゴッドモード': { mp: 50, type: 'dmg', power: 5.0, desc: '【合成】管理者権限による制裁' }
         };
 
-        // 合成レシピ (Key1 + Key2 = Result)
-        // 両方がMasteryになっている必要がある
+        // 敵ごとのラーニング対象スキル (デバッガーのみ)
+        const ENEMY_LEARN_MAP = {
+            'XSSスパイダー': 'スクリプト埋込',
+            'SQLインジェクター': 'DROP TABLE',
+            'ブルートフォーサー': '総当たり攻撃',
+            'フィッシング詐欺師': 'なりすまし',
+            '迷子のパケット': '再送要求',
+            '旧式ルーター': 'ボトルネック',
+            '未パッチサーバー': 'ゼロデイ',
+            'カーネル・パニック': '権限昇格',
+            '魔王エクスプロイト': '権限昇格'
+        };
+
+        // 合成レシピ
         const SYNTHESIS_RECIPES = [
             { a: 'ディープスキャン', b: 'DDoSキャノン', result: 'ゼロデイ・エクスプロイト' },
             { a: 'フォートレスプレス', b: 'デバッグモード', result: 'ゴッドモード' },
@@ -346,7 +357,6 @@
             { a: 'DDoS砲', b: '論理爆弾', result: 'サージストーム' }
         ];
 
-        // 職業別初期スキル
         const JOB_INITIAL_SKILLS = {
             'ホワイトハッカー': ['クイックスキャン', '緊急パッチ'],
             'セキュリティエンジニア': ['DDoS砲', '論理爆弾'],
@@ -365,13 +375,11 @@
 
         const COMBAT_COMMANDS = ['攻撃', 'スキル', '回復', '逃げる'];
 
-        // ゲーム状態
         const INITIAL_GAME_STATE = {
             x: 2, y: 2, level: 1, job: '', exp: 0,
             maxHP: 50, currentHP: 50,
             maxMP: 20, currentMP: 20,
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
-            // skills: [ { name: 'SkillName', exp: 0, master: false } ]
             skills: [], 
             eventFlags: {},
             mode: 'OVERWORLD',
@@ -379,7 +387,7 @@
             selectedCommand: 0,
             subMode: 'MAIN', 
             combatLock: false,
-            mapData: null // 生成されたマップを保存
+            mapData: null 
         };
 
         let gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
@@ -401,11 +409,8 @@
         }
 
         function drawMap() {
-            // カメラ位置計算 (プレイヤーを中心にする)
             let camX = gameState.x - Math.floor(VIEW_COLS / 2);
             let camY = gameState.y - Math.floor(VIEW_ROWS / 2);
-
-            // マップ端の制限
             camX = Math.max(0, Math.min(camX, MAP_COLS - VIEW_COLS));
             camY = Math.max(0, Math.min(camY, MAP_ROWS - VIEW_ROWS));
 
@@ -417,10 +422,8 @@
                 }
             }
             
-            // プレイヤー描画 (カメラ相対座標)
             const px = (gameState.x - camX) * TILE_SIZE;
             const py = (gameState.y - camY) * TILE_SIZE;
-            
             ctx.fillStyle = '#facc15'; 
             ctx.beginPath(); ctx.moveTo(px + 8, py + 4); ctx.lineTo(px + 24, py + 16); ctx.lineTo(px + 8, py + 28); ctx.fill();
         }
@@ -460,7 +463,6 @@
             tilesetImage.src = TILE_ASSET_BASE64;
             tilesetImage.onload = () => { isTilesetLoaded = true; };
 
-            // マップ生成 or ロード
             if (!gameState.mapData) {
                 gameMap = generateMap();
                 gameState.mapData = gameMap;
@@ -468,7 +470,6 @@
                 gameMap = gameState.mapData;
             }
 
-            // プレイヤー初期位置 (スタート地点を探す)
             if (gameState.x === 0 && gameState.y === 0) {
                 for (let y = 0; y < MAP_ROWS; y++) {
                     for (let x = 0; x < MAP_COLS; x++) {
@@ -520,7 +521,7 @@
             const nextX = gameState.x + dx;
             const nextY = gameState.y + dy;
 
-            if (nextX < 0 || nextX >= MAP_COLS || nextY < 0 || nextY >= MAP_ROWS) return; // マップ外
+            if (nextX < 0 || nextX >= MAP_COLS || nextY < 0 || nextY >= MAP_ROWS) return; 
 
             const targetTile = gameMap[nextY][nextX];
 
@@ -613,7 +614,6 @@
             gameState.combatLock = true;
             gameState.currentMP -= def.mp;
 
-            // スキル成長処理
             growSkill(skill);
 
             if (def.type === 'heal' || def.type === 'buff') {
@@ -637,8 +637,6 @@
                 skillObj.exp = MASTERY_EXP;
                 skillObj.master = true;
                 setTimeout(() => showMessage(`【熟練】${skillObj.name}をマスターした！`, 3000), 1000);
-                
-                // 進化・合成チェック
                 checkEvolution(skillObj);
             }
         }
@@ -648,16 +646,13 @@
             let newSkillName = null;
             let method = "";
 
-            // 1. 単体進化
             if (def.evolution) {
                 newSkillName = def.evolution;
                 method = "進化";
             }
 
-            // 2. 合成進化チェック
             if (!newSkillName) {
                 for (const recipe of SYNTHESIS_RECIPES) {
-                    // 持っているか？
                     const hasA = gameState.skills.find(s => s.name === recipe.a && s.master);
                     const hasB = gameState.skills.find(s => s.name === recipe.b && s.master);
                     const alreadyHas = gameState.skills.find(s => s.name === recipe.result);
@@ -671,7 +666,6 @@
             }
 
             if (newSkillName) {
-                // 既に持っているか確認
                 if (!gameState.skills.some(s => s.name === newSkillName)) {
                     gameState.skills.push({ name: newSkillName, exp: 0, master: false });
                     setTimeout(() => showMessage(`【${method}】新スキル『${newSkillName}』を習得！`, 4000), 2500);
@@ -715,6 +709,18 @@
             if (outcome === 'WIN') {
                 gameState.exp += enemy.level * 10;
                 showMessage(`勝利！ Exp+${enemy.level*10}`, 3000);
+                
+                // --- デバッガーのラーニング処理 ---
+                if (gameState.job === 'デバッガー') {
+                    const learnSkillName = ENEMY_LEARN_MAP[enemy.name];
+                    const alreadyLearned = gameState.skills.some(s => s.name === learnSkillName);
+                    
+                    if (learnSkillName && !alreadyLearned) {
+                        gameState.skills.push({ name: learnSkillName, exp: 0, master: false });
+                        setTimeout(() => showMessage(`【ラーニング】${enemy.name}の能力『${learnSkillName}』を吸収しました！`, 4000), 2000);
+                    }
+                }
+
                 if (enemy.isBoss) {
                     gameState.eventFlags['BOSS_DEFEATED'] = true;
                     setTimeout(() => showMessage("エリアボス撃破！ システムの安全が確保されました。", 6000), 3000);
@@ -723,7 +729,6 @@
             } else if (outcome === 'LOSE') {
                 showMessage("敗北... 緊急再起動。", 3000);
                 gameState.currentHP = gameState.maxHP;
-                // リスポーン
                 gameState.x = 2; gameState.y = 2; 
             } else {
                 showMessage("離脱しました。", 2000);
@@ -748,7 +753,6 @@
 
         // --- イベント判定 ---
         function checkStoryEvent(x, y) {
-            // ボス
             if (gameMap[y][x] === TILE_BOSS) {
                 if (!gameState.eventFlags['BOSS_DEFEATED']) {
                     initCombat({ name: 'カーネル・パニック', maxHP: 500, currentHP: 500, level: 25, type: 'ZeiJack', isBoss: true });
@@ -767,7 +771,7 @@
             box.classList.remove('hidden');
             
             if (text.includes("警告") || text.includes("ダメージ") || text.includes("敗北")) p.className = "text-lg text-red-300";
-            else if (text.includes("習得") || text.includes("マスター") || text.includes("レベルアップ")) p.className = "text-lg text-yellow-300";
+            else if (text.includes("習得") || text.includes("マスター") || text.includes("レベルアップ") || text.includes("ラーニング")) p.className = "text-lg text-yellow-300";
             else p.className = "text-lg text-green-300";
             
             messageTimer = setTimeout(() => box.classList.add('hidden'), duration);
@@ -787,9 +791,9 @@
                 document.getElementById('enemyHpBar').style.width = `${(e.currentHP/e.maxHP)*100}%`;
             }
 
-            // メニュー内ステータス
             const skillsText = gameState.skills.map(s => {
                 const def = SKILL_DEFINITIONS[s.name];
+                if(!def) return '';
                 const star = s.master ? '★' : '';
                 const width = Math.floor((s.exp / MASTERY_EXP) * 100);
                 return `
@@ -844,7 +848,7 @@ SPD: ${gameState.stats.spd}
             items.forEach((item, idx) => {
                 const div = document.createElement('div');
                 let classes = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
-                let label = item;
+                let label = typeof item === 'object' ? item.name : item;
                 
                 if (typeof item === 'object') {
                     const def = SKILL_DEFINITIONS[item.name];
@@ -859,7 +863,6 @@ SPD: ${gameState.stats.spd}
             });
         }
 
-        // --- システム ---
         window.startNewGame = function() {
             gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
             document.getElementById('title-screen').classList.add('hidden');
@@ -876,7 +879,6 @@ SPD: ${gameState.stats.spd}
             gameState.maxHP = 40 + base.vit * 2; gameState.maxMP = 20 + base.mag * 2;
             gameState.currentHP = gameState.maxHP; gameState.currentMP = gameState.maxMP;
             
-            // 初期スキル付与
             const initSkills = JOB_INITIAL_SKILLS[jobName];
             gameState.skills = initSkills.map(name => ({ name: name, exp: 0, master: false }));
 
@@ -887,7 +889,6 @@ SPD: ${gameState.stats.spd}
         window.openMenu = function() { if(gameState.mode!=='COMBAT') { gameState.isMenuOpen=true; document.getElementById('menuModal').classList.remove('hidden'); updateStatusDisplay(); isGameLoopRunning=false; } }
         window.closeMenu = function() { gameState.isMenuOpen=false; document.getElementById('menuModal').classList.add('hidden'); isGameLoopRunning=true; requestAnimationFrame(gameLoop); }
 
-        // Save/Load
         const SAVE_KEY_PREFIX = 'zeiJackQuest2_save_';
         let currentMenuMode = 'save';
         window.openSaveLoadMenu = function(mode) {
