@@ -41,13 +41,16 @@
             bottom: 20px;
             right: 20px;
             width: 200px;
-            height: 150px;
+            height: auto; /* 高さを自動調整に変更 */
+            min-height: 100px; /* 最小の高さを設定 */
             z-index: 10;
         }
         .menu-item {
             padding: 8px;
             cursor: pointer;
             transition: background-color 0.1s;
+            border-radius: 4px; /* 選択時の背景を見やすく */
+            margin-bottom: 2px;
         }
         .menu-item.selected {
             background-color: #3b82f6; /* Blue selection */
@@ -100,8 +103,8 @@
                 </div>
 
                 <!-- バトルUI要素: コマンドメニュー -->
-                <div id="combat-menu-box" class="rpg-window p-2 hidden">
-                    <h3 class="text-yellow-300 text-lg mb-1 border-b border-gray-700 pb-1">コマンド</h3>
+                <div id="combat-menu-box" class="rpg-window p-3 hidden">
+                    <h3 class="text-yellow-300 text-lg mb-2 border-b border-gray-700 pb-1">コマンド</h3>
                     <div id="commandList" class="space-y-1">
                         <!-- コマンドアイテムはJSで挿入されます -->
                     </div>
