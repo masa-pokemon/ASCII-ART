@@ -13,20 +13,16 @@
             font-family: 'DotGothic16', monospace;
             background-color: #0f172a; /* Cyber World: Dark Slate */
             color: #e2e8f0; /* Light Text */
-            overflow: hidden; /* スクロール防止 */
-            user-select: none; /* テキスト選択防止 */
         }
         #gameCanvas {
-            image-rendering: pixelated;
-            border: 4px solid #3b82f6;
+            image-rendering: pixelated; /* ドット絵をきれいに表示 */
+            border: 4px solid #3b82f6; /* Blue border for a digital feel */
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
             margin: 0 auto;
-            background-color: #000;
-            outline: none; /* フォーカス時の枠線を消す */
         }
         /* RPGメニュー/ウィンドウ風スタイル */
         .rpg-window {
-            background-color: rgba(30, 41, 59, 0.95);
+            background-color: rgba(30, 41, 59, 0.95); /* Darker, slightly transparent */
             border: 3px solid #60a5fa;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
@@ -54,29 +50,8 @@
             transition: background-color 0.1s;
         }
         .menu-item.selected {
-            background-color: #3b82f6;
+            background-color: #3b82f6; /* Blue selection */
             color: #0f172a;
-        }
-        /* クリックしてスタート画面 */
-        #start-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(15, 23, 42, 0.9);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            cursor: pointer;
-        }
-        .blink {
-            animation: blinker 1s linear infinite;
-        }
-        @keyframes blinker {
-            50% { opacity: 0; }
         }
     </style>
     <!-- Firebase Imports -->
@@ -86,8 +61,10 @@
         import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
+        // Firestoreログレベルをデバッグに設定
         setLogLevel('Debug');
 
+        // グローバル変数
         window.initializeApp = initializeApp;
         window.getAuth = getAuth;
         window.signInAnonymously = signInAnonymously;
@@ -103,21 +80,13 @@
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
 
     <!-- メインコンテナ -->
-    <div class="max-w-4xl w-full relative">
+    <div class="max-w-4xl w-full">
         <h1 class="text-3xl font-bold text-center mb-6 text-yellow-400">ゼイジャックエストI <span class="text-sm text-cyan-300 block">~Cyber Security Saga~</span></h1>
-        
         <div class="flex flex-col lg:flex-row gap-4">
             
             <!-- ゲーム画面コンテナ -->
             <div id="game-container" class="lg:w-3/4 flex justify-center relative">
-                <!-- tabindex="0" を追加してキャンバス自体がフォーカスを受け取れるようにする -->
-                <canvas id="gameCanvas" width="512" height="512" class="w-full max-w-lg" tabindex="0"></canvas>
-
-                <!-- スタート画面オーバーレイ (フォーカス取得用) -->
-                <div id="start-screen" onclick="startGame()">
-                    <h2 class="text-4xl text-yellow-400 mb-4 font-bold">CLICK TO START</h2>
-                    <p class="text-cyan-300 blink">画面をクリックしてシステム接続</p>
-                </div>
+                <canvas id="gameCanvas" width="512" height="512" class="w-full max-w-lg"></canvas>
 
                 <!-- バトルUI要素: 敵ステータス -->
                 <div id="enemy-status-box" class="rpg-window p-3 absolute top-4 left-4 w-64 hidden">
@@ -146,18 +115,17 @@
                     <p id="playerJob" class="text-sm">職業: --</p>
                     <p id="playerLevel" class="text-sm">Lv: --</p>
                     <p id="playerHP" class="text-sm">HP: --</p>
-                    <p id="statusMessage" class="text-sm text-green-400 mt-2 h-10 overflow-hidden">待機中...</p>
+                    <p id="statusMessage" class="text-sm text-green-400 mt-2 h-10 overflow-hidden">システム起動中...</p>
                     <p class="text-xs mt-3 text-gray-400">UserID: <span id="userIdDisplay">未認証</span></p>
                 </div>
                 
                 <div class="rpg-window p-4">
                     <h2 class="text-xl text-yellow-300 border-b border-gray-500 pb-1 mb-2">操作方法</h2>
                     <ul class="list-disc list-inside text-sm space-y-1">
-                        <li>移動/選択: <span class="text-blue-400">矢印キー</span></li>
-                        <li>決定/攻撃: <span class="text-blue-400">Enterキー</span></li>
-                        <li>メニュー: <span class="text-blue-400">Eキー</span></li>
+                        <li>移動/メニュー操作: <span class="text-blue-400">矢印キー</span></li>
+                        <li>決定: <span class="text-blue-400">Enterキー</span></li>
+                        <li>メニュー開閉: <span class="text-blue-400">Eキー</span></li>
                     </ul>
-                    <p class="text-xs text-gray-500 mt-2">※キーが効かない場合は画面をクリック</p>
                 </div>
             </div>
         </div>
@@ -170,8 +138,8 @@
     </div>
 
     <!-- Eキーメニューモーダル -->
-    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden" onclick="refocusGame(event)">
-        <div class="rpg-window p-6 w-11/12 max-w-xl" onclick="event.stopPropagation()">
+    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden">
+        <div class="rpg-window p-6 w-11/12 max-w-xl">
             <h2 class="text-2xl text-red-400 mb-4 border-b border-gray-500 pb-2">インベントリ・ステータス</h2>
             
             <div id="jobSelection" class="space-y-3 mb-6">
@@ -190,6 +158,13 @@
                 <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
             </div>
             
+            <div id="pikmonParty" class="mb-6 border p-3 border-gray-700 rounded">
+                <h3 class="text-lg text-yellow-300 mb-2">仲間ピクモン</h3>
+                <ul id="pikmonList" class="text-sm space-y-1">
+                    <li>(まだ仲間はいません)</li>
+                </ul>
+            </div>
+
             <div class="flex justify-end space-x-3">
                 <button onclick="saveGame()" class="pixel-button bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">セーブ</button>
                 <button onclick="closeMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">閉じる (E)</button>
@@ -244,8 +219,8 @@
         // --- ゲーム定数と変数 ---
         const TILE_SIZE = 32;
         const CANVAS_SIZE = 512;
-        const MAP_COLS = 16;
-        const MAP_ROWS = 16;
+        const MAP_COLS = CANVAS_SIZE / TILE_SIZE; // 16
+        const MAP_ROWS = CANVAS_SIZE / TILE_SIZE; // 16
         
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -256,6 +231,7 @@
         const TILE_GRASS = 2; 
         const TILE_START = 9; 
 
+        // マップデータ (16x16)
         const gameMap = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 9, 0, 0, 2, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
@@ -275,6 +251,7 @@
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         ];
 
+        // 初期ステータス (セキュリティRPG風にアレンジ)
         const JOB_BASE_STATS = {
             'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5, desc: '攻守のバランスが良い。脆弱性診断が得意。' },
             'セキュリティエンジニア': { str: 4, mag: 12, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。論理防御は低いが火力は高い。' },
@@ -294,37 +271,26 @@
             maxHP: 50,
             currentHP: 50,
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
-            eventFlags: {},
+            pikmonParty: [], 
+            isJobSelected: false,
+            eventFlags: {}, // ストーリー進行用フラグ
             messageTimer: null,
             isMenuOpen: false,
-            mode: 'OVERWORLD',
-            currentEnemy: null,
+            // --- バトルシステム用変数 ---
+            mode: 'OVERWORLD', // 'OVERWORLD' or 'COMBAT'
+            currentEnemy: null, // { name, maxHP, currentHP, level, type }
             selectedCommand: 0,
             combatLock: false,
-        };
-        
-        // --- フォーカスと開始処理 ---
-        // グローバル関数として定義し、HTMLから呼べるようにする
-        window.startGame = function() {
-            const startScreen = document.getElementById('start-screen');
-            startScreen.classList.add('hidden');
-            // キャンバスにフォーカスを当てる
-            canvas.focus();
-            showMessage("システム接続確立。キー操作が可能になりました。", 3000);
-        };
-
-        window.refocusGame = function(event) {
-            // モーダルの外側をクリックしたら閉じるなどの処理がある場合
-            // ここでは特に何もしないが、メニューを閉じる際にフォーカスを戻す
         };
 
         // --- ゲーム初期化とメインループ ---
         function initGame() {
+            // スタート地点の設定
             let startFound = false;
             for (let y = 0; y < MAP_ROWS; y++) {
                 for (let x = 0; x < MAP_COLS; x++) {
                     if (gameMap[y][x] === TILE_START) {
-                        if (gameState.x === 0 && gameState.y === 0) {
+                        if (gameState.x === 0 && gameState.y === 0) { // 新規の場合のみ
                             gameState.x = x;
                             gameState.y = y;
                         }
@@ -334,6 +300,7 @@
                 }
                 if (startFound) break;
             }
+
             requestAnimationFrame(gameLoop);
         }
 
@@ -359,20 +326,25 @@
         
         // --- 描画処理 ---
         function drawTile(x, y, type) {
+            // サイバーパンク風配色
             const colors = {
-                [TILE_GROUND]: '#1e293b',
-                [TILE_WALL]: '#475569',
-                [TILE_GRASS]: '#0f766e',
+                [TILE_GROUND]: '#1e293b', // Dark Slate (Circuit Board base)
+                [TILE_WALL]: '#475569',   // Lighter Slate (Firewall)
+                [TILE_GRASS]: '#0f766e',  // Teal (Data Stream)
                 [TILE_START]: '#1e293b'
             };
+            
             ctx.fillStyle = colors[type] || '#000';
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+            // グリッドライン
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 1;
             ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
+            // タイルごとの装飾
             if (type === TILE_GRASS) {
-                ctx.fillStyle = '#2dd4bf';
+                ctx.fillStyle = '#2dd4bf'; // Bright Teal bits
                 ctx.fillRect(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 4, 4);
                 ctx.fillRect(x * TILE_SIZE + 20, y * TILE_SIZE + 20, 4, 4);
             } else if (type === TILE_WALL) {
@@ -391,6 +363,7 @@
         function drawPlayer() {
             const px = gameState.x * TILE_SIZE;
             const py = gameState.y * TILE_SIZE;
+            // プレイヤーキャラ（カーソル風）
             ctx.fillStyle = '#facc15'; 
             ctx.beginPath();
             ctx.moveTo(px + 16, py + 4);
@@ -408,12 +381,14 @@
         }
 
         function drawBattleScreen() {
+            // バトル背景
             const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_SIZE);
             gradient.addColorStop(0, '#0f172a');
             gradient.addColorStop(1, '#1e1b4b');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
+            // デジタルグリッド
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
             ctx.lineWidth = 1;
             for(let i = 0; i < CANVAS_SIZE; i+=40) {
@@ -424,17 +399,23 @@
             if (gameState.currentEnemy) {
                 const cx = CANVAS_SIZE / 2;
                 const cy = CANVAS_SIZE / 3;
-                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : 
-                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
+
+                // 敵のタイプに応じた描画
+                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : // Boss: Red
+                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : // ZeiJack: Orange
+                                   '#22c55e'; // Promon: Green
                 
+                // 敵の影
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.beginPath();
                 ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2);
                 ctx.fill();
 
+                // 敵本体
                 ctx.fillStyle = enemyColor;
                 ctx.beginPath();
                 if (gameState.currentEnemy.isBoss) {
+                    // ボスは大きくトゲトゲ
                     ctx.moveTo(cx, cy - 80);
                     ctx.lineTo(cx + 60, cy);
                     ctx.lineTo(cx + 40, cy + 80);
@@ -450,10 +431,12 @@
                 ctx.closePath();
                 ctx.fill();
                 
+                // 敵の目
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(cx - 20, cy - 10, 10, 10);
                 ctx.fillRect(cx + 10, cy - 10, 10, 10);
 
+                // 名前表示
                 ctx.font = '20px DotGothic16';
                 ctx.fillStyle = '#fef08a';
                 ctx.textAlign = 'center';
@@ -461,7 +444,7 @@
             }
         }
 
-        // --- 移動システム ---
+        // --- 移動とイベント判定 ---
         const MOVEMENT_COOLDOWN = 150; 
         let lastMoveTime = 0;
 
@@ -470,15 +453,10 @@
         }
 
         function attemptMove(dx, dy) {
-            // 未ログインやメニュー中は移動不可（ただしメニューを開くEキーはkeydownで制御）
-            if (gameState.isMenuOpen || gameState.mode === 'COMBAT') return;
-
-            // 職業未選択時の移動試行でメッセージ
-            if (!gameState.isJobSelected) {
-                showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 2000);
+            if (!gameState.isJobSelected || gameState.isMenuOpen || gameState.mode === 'COMBAT') {
+                if (!gameState.isJobSelected && !gameState.isMenuOpen) showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 2000);
                 return;
             }
-
             const now = Date.now();
             if (now - lastMoveTime < MOVEMENT_COOLDOWN) return;
             lastMoveTime = now;
@@ -494,6 +472,7 @@
                 gameState.x = newX; 
                 gameState.y = newY;
                 
+                // イベントとエンカウントのチェック順序
                 if (!checkStoryEvent(newX, newY)) {
                      if (targetTile === TILE_GRASS) {
                         checkEncounter();
@@ -502,7 +481,7 @@
             }
         }
         
-        // --- バトルロジック ---
+        // --- バトルシステム ---
         function checkEncounter() {
             if (Math.random() < 0.15 && !gameState.combatLock) { 
                 initCombat();
@@ -539,8 +518,6 @@
                 };
                 showMessage(isZeiJack ? "不正なプロセスを検知！" : "中立なデータと遭遇。", 3000);
             }
-            // バトル開始時はメニューを閉じる
-            gameState.isMenuOpen = false;
             document.getElementById('menuModal').classList.add('hidden');
         }
 
@@ -564,13 +541,12 @@
             } else if (outcome === 'LOSE') {
                 showMessage("システムダウン... 再起動します。", 4000);
                 gameState.currentHP = Math.floor(gameState.maxHP / 2);
+                // スタート地点に戻す
                 gameState.x = 1; gameState.y = 1; 
             } else if (outcome === 'ESCAPE') {
                 showMessage("セッションを切断し、離脱しました。", 3000);
             }
             
-            // バトル終了後にフォーカスをキャンバスに戻す
-            canvas.focus();
             requestAnimationFrame(gameLoop);
         }
 
@@ -609,6 +585,7 @@
         function performAttack() {
             const crit = Math.random() < 0.1 ? 2 : 1;
             const damage = Math.floor(Math.max(1, gameState.stats.str * 1.5 - (gameState.currentEnemy.level * 0.5)) * crit);
+            
             showMessage(`攻撃パケット送信... ${crit > 1 ? "クリティカル！" : ""} ${gameState.currentEnemy.name}に${damage}ダメージ！`, 3000);
             gameState.currentEnemy.currentHP -= damage;
             
@@ -622,7 +599,7 @@
         
         function performEscape() {
             const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
-            if (Math.random() < chance + 0.5) { 
+            if (Math.random() < chance + 0.5) { // 逃げやすく調整
                 setTimeout(() => endCombat('ESCAPE'), 1000);
             } else {
                 showMessage("接続を切断できない！", 2000);
@@ -633,6 +610,7 @@
         function enemyTurn() {
             const enemy = gameState.currentEnemy;
             const damage = Math.floor(Math.max(0, enemy.level * 2 + 5 - gameState.stats.vit / 2));
+            
             gameState.currentHP -= damage;
             showMessage(`${enemy.name}の反撃！ ${damage}のダメージを受けた！`, 3000);
 
@@ -663,24 +641,34 @@
             }
         }
         
-        // --- イベントシステム ---
+        // --- ストーリーイベントシステム ---
         function checkStoryEvent(x, y) {
+            // ユニークキーでイベント管理
+            const locKey = `${x},${y}`;
+            
+            // 1. スタート地点 (チュートリアル)
             if (gameMap[y][x] === TILE_START && !gameState.eventFlags['START_TUTORIAL']) {
                 gameState.eventFlags['START_TUTORIAL'] = true;
-                showMessage("【システムログ】認証完了。右下の『ルートディレクトリ』を目指してください。", 8000);
+                showMessage("【システムログ】認証完了。ネットワーク内の脆弱性を特定し、パッチを適用せよ。右下の『ルートディレクトリ』を目指してください。", 10000);
                 return true;
             }
+
+            // 2. 中間地点 (8, 8) 付近
             if (x === 8 && y === 8 && !gameState.eventFlags['MID_WARNING']) {
                 gameState.eventFlags['MID_WARNING'] = true;
-                showMessage("【警告】DoS攻撃の痕跡があります。慎重に進んでください。", 6000);
+                showMessage("【警告】このセクターはデータ破損が激しい。DoS攻撃の痕跡があります。慎重に進んでください。", 8000);
                 return true;
             }
+
+            // 3. 隠しポイント (3, 12) - セキュリティネタ
             if (x === 3 && y === 12 && !gameState.eventFlags['SECRET_CACHE']) {
                 gameState.eventFlags['SECRET_CACHE'] = true;
                 gameState.exp += 50;
-                showMessage("【発見】古いキャッシュデータを発見。経験値+50", 4000);
+                showMessage("【発見】古いキャッシュデータを発見。「password123」...脆弱なパスワードだ。経験値+50", 6000);
                 return true;
             }
+
+            // 4. ボス戦トリガー (14, 14)
             if (x === 14 && y === 14) {
                 if (!gameState.eventFlags['BOSS_DEFEATED']) {
                     initCombat({
@@ -697,6 +685,7 @@
                     return true;
                 }
             }
+            
             return false;
         }
 
@@ -704,9 +693,11 @@
             clearTimeout(gameState.messageTimer);
             const box = document.getElementById('message-box');
             const p = document.getElementById('message-text');
+            
             p.textContent = text;
             box.classList.remove('hidden');
             
+            // ログの色分け（簡易的）
             if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) {
                 p.className = "text-lg leading-relaxed text-red-300";
             } else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) {
@@ -744,6 +735,7 @@ VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
 ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             `.trim();
             document.getElementById('statusText').textContent = statsText;
+
             document.getElementById('jobSelection').classList.toggle('hidden', gameState.isJobSelected);
         }
 
@@ -759,23 +751,19 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             });
         }
 
-        // --- キー入力とUI操作 ---
-        
-        // メニュー操作
+        // --- 入力ハンドリング ---
         window.openMenu = function() {
             if (!isAuthReady || gameState.mode === 'COMBAT') return;
             gameState.isMenuOpen = true;
             document.getElementById('menuModal').classList.remove('hidden');
             updateStatusDisplay();
-        };
+        }
 
         window.closeMenu = function() {
             gameState.isMenuOpen = false;
             document.getElementById('menuModal').classList.add('hidden');
-            // メニューを閉じた後、キャンバスにフォーカスを戻す
-            canvas.focus();
             requestAnimationFrame(gameLoop);
-        };
+        }
 
         window.selectJob = function(jobName) {
             if (gameState.isJobSelected) return;
@@ -786,47 +774,24 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             gameState.currentHP = gameState.maxHP;
             showMessage(`ロール: ${jobName} をインストールしました。`, 4000);
             updateStatusDisplay();
-        };
+        }
 
-        // キーダウンイベントリスナーを window に追加
-        window.addEventListener('keydown', (e) => {
-            // スタート画面が表示されている場合は、どのキーでもスタートさせる
-            if (!document.getElementById('start-screen').classList.contains('hidden')) {
-                window.startGame();
-                return;
-            }
-
-            // メニュー操作
+        document.addEventListener('keydown', (e) => {
             if (gameState.isMenuOpen) {
-                if (e.key === 'e' || e.key === 'E') {
-                    window.closeMenu();
-                    e.preventDefault();
-                }
+                if (e.key === 'e' || e.key === 'E') window.closeMenu();
                 return;
             }
             
-            // オーバーワールド操作
             if (gameState.mode === 'OVERWORLD') {
-                if (e.key === 'ArrowUp') { attemptMove(0, -1); e.preventDefault(); }
-                if (e.key === 'ArrowDown') { attemptMove(0, 1); e.preventDefault(); }
-                if (e.key === 'ArrowLeft') { attemptMove(-1, 0); e.preventDefault(); }
-                if (e.key === 'ArrowRight') { attemptMove(1, 0); e.preventDefault(); }
-                if (e.key === 'e' || e.key === 'E') { window.openMenu(); e.preventDefault(); }
-            } 
-            // バトル操作
-            else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
-                if (e.key === 'ArrowUp') {
-                    gameState.selectedCommand = Math.max(0, gameState.selectedCommand - 1);
-                    e.preventDefault();
-                }
-                if (e.key === 'ArrowDown') {
-                    gameState.selectedCommand = Math.min(COMBAT_COMMANDS.length - 1, gameState.selectedCommand + 1);
-                    e.preventDefault();
-                }
-                if (e.key === 'Enter') {
-                    executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
-                    e.preventDefault();
-                }
+                if (e.key === 'ArrowUp') attemptMove(0, -1);
+                if (e.key === 'ArrowDown') attemptMove(0, 1);
+                if (e.key === 'ArrowLeft') attemptMove(-1, 0);
+                if (e.key === 'ArrowRight') attemptMove(1, 0);
+                if (e.key === 'e' || e.key === 'E') window.openMenu();
+            } else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
+                if (e.key === 'ArrowUp') gameState.selectedCommand = Math.max(0, gameState.selectedCommand - 1);
+                if (e.key === 'ArrowDown') gameState.selectedCommand = Math.min(COMBAT_COMMANDS.length - 1, gameState.selectedCommand + 1);
+                if (e.key === 'Enter') executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
                 renderCombatMenu();
             }
         });
@@ -850,7 +815,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 console.error("Save error:", error);
                 showMessage("バックアップに失敗しました。", 3000);
             }
-        };
+        }
 
         async function loadGame() {
             if (!isAuthReady || !userId || !db) return;
@@ -862,6 +827,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                     gameState.mode = 'OVERWORLD';
                     showMessage("バックアップから復元しました。", 4000);
                 } else {
+                    // 初回プロローグ
                     setTimeout(() => {
                          showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000);
                     }, 1000);
