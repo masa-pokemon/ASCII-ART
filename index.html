@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ゼイジャックエストI - Debugger Learning</title>
+    <title>ZeiJack Quest I - Skill Evolution</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -13,6 +13,7 @@
             background-color: #0f172a;
             color: #e2e8f0;
             overflow: hidden;
+            user-select: none;
         }
         #gameCanvas {
             image-rendering: pixelated;
@@ -47,7 +48,7 @@
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 240px;
+            width: 260px;
             height: auto;
             min-height: 120px;
             z-index: 10;
@@ -60,6 +61,7 @@
             margin-bottom: 2px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
         .menu-item.selected {
             background-color: #3b82f6;
@@ -67,6 +69,18 @@
         }
         .menu-item.disabled {
             color: #64748b;
+        }
+        .skill-exp-bar {
+            width: 40px;
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+            margin-left: 8px;
+            overflow: hidden;
+        }
+        .skill-exp-fill {
+            height: 100%;
+            background: #facc15;
         }
         .slot-button {
             display: block;
@@ -95,20 +109,20 @@
 
     <!-- タイトル画面 -->
     <div id="title-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900">
-        <h1 class="text-5xl font-bold text-yellow-400 mb-2 tracking-widest drop-shadow-lg">ZeiJack Quest I</h1>
-        <p class="text-cyan-400 mb-12 text-lg tracking-wide">~ Cyber Security Saga ~</p>
+        <h1 class="text-5xl font-bold text-yellow-400 mb-2 tracking-widest drop-shadow-lg">ZeiJack Quest II</h1>
+        <p class="text-cyan-400 mb-12 text-lg tracking-wide">~ Evolve & Synthesis ~</p>
         
         <div class="space-y-4 w-64">
             <button onclick="startNewGame()" class="pixel-button w-full py-4 text-xl font-bold rounded">NEW GAME</button>
             <button onclick="openSaveLoadMenu('load')" class="pixel-button w-full py-4 text-xl font-bold rounded">LOAD GAME</button>
         </div>
-        <p class="absolute bottom-4 text-slate-500 text-xs">Local Storage & TileSet Version</p>
+        <p class="absolute bottom-4 text-slate-500 text-xs">Local Storage & Skill Evolution Ver.</p>
     </div>
 
     <!-- メインコンテナ -->
     <div id="main-container" class="max-w-4xl w-full hidden">
         <div class="flex justify-between items-end mb-2">
-            <h1 class="text-2xl font-bold text-yellow-400">ゼイジャックエストI</h1>
+            <h1 class="text-2xl font-bold text-yellow-400">ゼイジャックエストII</h1>
             <button onclick="returnToTitle()" class="text-xs text-gray-400 hover:text-white underline">タイトルへ戻る</button>
         </div>
         
@@ -147,7 +161,8 @@
                         <p class="text-sm">HP: <span id="playerHP" class="text-green-400">--</span></p>
                         <p class="text-sm">MP: <span id="playerMP" class="text-blue-400">--</span></p>
                     </div>
-                    <p id="statusMessage" class="text-sm text-gray-400 mt-2 h-10 overflow-hidden">システム起動中...</p>
+                    <p class="text-xs text-gray-500 mt-2">座標: <span id="playerPos">--</span></p>
+                    <p id="statusMessage" class="text-sm text-gray-400 mt-2 h-20 overflow-hidden">システム起動中...</p>
                 </div>
                 
                 <div class="rpg-window p-4">
@@ -169,7 +184,7 @@
 
     <!-- Eキーメニューモーダル -->
     <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 hidden">
-        <div class="rpg-window p-6 w-11/12 max-w-xl relative">
+        <div class="rpg-window p-6 w-11/12 max-w-2xl relative">
             <h2 class="text-2xl text-red-400 mb-4 border-b border-gray-500 pb-2">メニュー</h2>
             
             <div id="jobSelection" class="space-y-3 mb-6 hidden">
@@ -183,12 +198,16 @@
                 </div>
             </div>
 
-            <div id="statsDisplay" class="mb-6 border p-3 border-gray-700 rounded">
-                <h3 class="text-lg text-yellow-300 mb-2">ステータス</h3>
-                <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
-                <div id="learnedSkillsDisplay" class="mt-4 pt-2 border-t border-gray-600 hidden">
-                    <h4 class="text-yellow-200 mb-1">習得済みバグスキル</h4>
-                    <ul id="learnedSkillsList" class="text-xs space-y-1 text-gray-300"></ul>
+            <div id="statsDisplay" class="grid grid-cols-2 gap-4 mb-4">
+                <div class="border p-3 border-gray-700 rounded bg-slate-800">
+                    <h3 class="text-lg text-yellow-300 mb-2">ステータス</h3>
+                    <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
+                </div>
+                <div class="border p-3 border-gray-700 rounded bg-slate-800 overflow-y-auto" style="max-height: 300px;">
+                    <h3 class="text-lg text-cyan-300 mb-2">習得スキル (成長度)</h3>
+                    <ul id="skillListDisplay" class="text-sm space-y-2">
+                        <!-- スキルリスト -->
+                    </ul>
                 </div>
             </div>
             
@@ -211,11 +230,15 @@
     </div>
     
     <script>
-        // --- ゲーム定数と変数 ---
+        // --- 定数定義 ---
         const TILE_SIZE = 32;
-        const CANVAS_SIZE = 512;
-        const MAP_COLS = CANVAS_SIZE / TILE_SIZE; 
-        const MAP_ROWS = CANVAS_SIZE / TILE_SIZE; 
+        const CANVAS_SIZE = 512; // 16x16 tiles view
+        const VIEW_COLS = CANVAS_SIZE / TILE_SIZE; // 16
+        const VIEW_ROWS = CANVAS_SIZE / TILE_SIZE; // 16
+        
+        // マップ全体のサイズ（拡張）
+        const MAP_COLS = 40; 
+        const MAP_ROWS = 40;
         
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -224,19 +247,26 @@
         const TILE_WALL = 14; 
         const TILE_GRASS = 13; 
         const TILE_START = 9; 
+        const TILE_BOSS = 8;
 
-        // タイルセット画像（ダミー生成）
-        function createDummyTileset() {
+        // --- 画像アセット生成 ---
+        function createTileset() {
             const c = document.createElement('canvas');
-            c.width = 320;
-            c.height = 32;
+            c.width = 320; c.height = 32;
             const cx = c.getContext('2d');
+            // 0: Ground
             cx.fillStyle = '#1e293b'; cx.fillRect(0, 0, 32, 32);
             cx.strokeStyle = '#334155'; cx.lineWidth = 2; cx.strokeRect(2, 2, 28, 28);
+            // 1: Wall
             cx.fillStyle = '#475569'; cx.fillRect(32, 0, 32, 32);
             cx.fillStyle = '#64748b'; cx.fillRect(36, 4, 24, 24);
+            // 2: Grass (Data)
             cx.fillStyle = '#0f766e'; cx.fillRect(64, 0, 32, 32);
             cx.fillStyle = '#2dd4bf'; cx.fillRect(68, 8, 4, 4); cx.fillRect(80, 20, 4, 4); cx.fillRect(88, 6, 2, 8);
+            // 8: Boss
+            cx.fillStyle = '#7f1d1d'; cx.fillRect(256, 0, 32, 32);
+            cx.fillStyle = '#ef4444'; cx.font = 'bold 20px monospace'; cx.fillText('!', 266, 24);
+            // 9: Start
             cx.fillStyle = '#1e293b'; cx.fillRect(288, 0, 32, 32);
             cx.fillStyle = '#3b82f6'; cx.font = 'bold 20px monospace'; cx.fillText('S', 296, 24);
             return c.toDataURL();
@@ -245,85 +275,111 @@
         let tilesetImage = new Image();
         let isTilesetLoaded = false;
 
-        // マップデータ (16x16)
-        const gameMap = [
-            [ 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22],
-            [ 14,  9,  1,  1, 13, 13,  1,  1, 14,  1,  1,  1,  1,  1,  1, 14],
-            [ 22,  1,  1, 13, 13,  1,  1,  1, 22,  1, 14, 14,  1, 14,  1, 22],
-            [ 14,  1, 13, 13,  1,  1, 14, 14, 14,  1, 13, 22,  1, 13,  1, 14],
-            [ 22,  1, 13,  1,  1,  1, 22, 13, 13, 13, 13, 14,  1, 13,  1, 22],
-            [ 14,  1,  1,  1, 14,  1, 14, 13, 14, 14, 14, 14,  1,  1,  1, 14],
-            [ 22,  1, 14, 14, 14,  1, 22, 13, 13, 13,  1,  1,  1, 14,  1, 22],
-            [ 14, 14,  1,  1,  1,  1, 14, 14, 14,  1,  1, 14,  1, 22,  1, 14],
-            [ 22, 22, 22, 22, 22, 22, 22,  1,  1,  1, 14, 22,  1, 14,  1, 22],
-            [ 14, 13, 13, 13,  1,  1,  1,  1, 14,  1,  1,  1,  1, 22,  1, 14],
-            [ 22, 13, 14, 13,  1, 14, 14,  1, 22, 14, 14, 14, 14, 14,  1, 22],
-            [ 14,  1, 22, 13,  1, 22,  1,  1,  1,  1,  1,  1,  1,  1,  1, 14],
-            [ 22,  1, 14,  1,  1, 14,  1, 14, 14, 14, 14, 14, 14, 14, 14, 22],
-            [ 14,  1,  1,  1, 14, 22,  1,  1,  1,  1,  1,  1,  1,  1,  1, 14],
-            [ 22,  1, 13, 13, 13,  1,  1, 13, 13, 13, 13, 13, 13, 13,  1, 22],
-            [ 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14],
+        // マップデータ (自動生成)
+        let gameMap = [];
+
+        function generateMap() {
+            const map = [];
+            for (let y = 0; y < MAP_ROWS; y++) {
+                const row = [];
+                for (let x = 0; x < MAP_COLS; x++) {
+                    // 外周は壁
+                    if (x === 0 || x === MAP_COLS - 1 || y === 0 || y === MAP_ROWS - 1) {
+                        row.push(TILE_WALL);
+                    } else {
+                        // ランダム生成
+                        const r = Math.random();
+                        if (r < 0.1) row.push(TILE_WALL);
+                        else if (r < 0.25) row.push(TILE_GRASS);
+                        else row.push(TILE_GROUND);
+                    }
+                }
+                map.push(row);
+            }
+            // 固定イベント地点
+            map[2][2] = TILE_START;
+            map[MAP_ROWS - 3][MAP_COLS - 3] = TILE_BOSS;
+            return map;
+        }
+
+        // --- スキル・職業定義 ---
+        
+        // スキルマスターに必要な経験値
+        const MASTERY_EXP = 100;
+        const SKILL_EXP_GAIN = 20; // 1回使うごとに増える量
+
+        // スキルデータベース (定義)
+        const SKILL_DEFINITIONS = {
+            // 基本攻撃系
+            'パケット攻撃': { mp: 0, type: 'dmg', power: 1.0, desc: '通常攻撃' },
+            'クイックスキャン': { mp: 4, type: 'dmg', power: 1.3, desc: '弱点を突く高速攻撃', evolution: 'ディープスキャン' },
+            'ディープスキャン': { mp: 8, type: 'dmg', power: 1.8, desc: '深層まで解析する痛恨の一撃' },
+            'DDoS砲': { mp: 8, type: 'dmg', power: 1.8, desc: '高負荷攻撃', evolution: 'DDoSキャノン' },
+            'DDoSキャノン': { mp: 16, type: 'dmg', power: 2.8, desc: 'サーバーをダウンさせる超負荷攻撃' },
+            'シールドバッシュ': { mp: 5, type: 'dmg', power: 1.2, desc: '防御依存攻撃', evolution: 'フォートレスプレス' },
+            'フォートレスプレス': { mp: 10, type: 'dmg', power: 2.0, desc: '鉄壁の防御で押し潰す' },
+            'バグ潰し': { mp: 4, type: 'dmg', power: 1.4, desc: 'バグ駆除', evolution: 'デバッグモード' },
+            'デバッグモード': { mp: 10, type: 'dmg', power: 2.2, desc: 'システムの理を書き換える攻撃' },
+            
+            // 回復・補助系
+            '緊急パッチ': { mp: 6, type: 'heal', power: 0.4, desc: 'HP小回復', evolution: 'セキュリティアップデート' },
+            'セキュリティアップデート': { mp: 12, type: 'heal', power: 0.8, desc: 'HP大回復' },
+            '鉄壁の守り': { mp: 8, type: 'buff', power: 1.5, desc: '防御UP(今回は小回復)', evolution: '絶対防御障壁' },
+            '絶対防御障壁': { mp: 16, type: 'buff', power: 2.0, desc: '防御特大UP(今回は中回復)' },
+            'ヒールコード': { mp: 5, type: 'heal', power: 0.5, desc: 'HP中回復', evolution: 'リファクタリング' },
+            'リファクタリング': { mp: 15, type: 'heal', power: 1.0, desc: 'HP全回復' },
+
+            // 上位・合成スキル
+            '論理爆弾': { mp: 15, type: 'dmg', power: 2.5, desc: '条件を満たすと爆発する罠' },
+            'サージストーム': { mp: 25, type: 'dmg', power: 3.5, desc: '【合成】電気的嵐による全体攻撃' },
+            'ゼロデイ・エクスプロイト': { mp: 30, type: 'dmg', power: 4.0, desc: '【合成】防御不可能な未知の攻撃' },
+            '完全修復プロトコル': { mp: 40, type: 'heal', power: 1.0, desc: '【合成】全てを元通りにする奇跡' },
+            'ゴッドモード': { mp: 50, type: 'dmg', power: 5.0, desc: '【合成】管理者権限による制裁' }
+        };
+
+        // 合成レシピ (Key1 + Key2 = Result)
+        // 両方がMasteryになっている必要がある
+        const SYNTHESIS_RECIPES = [
+            { a: 'ディープスキャン', b: 'DDoSキャノン', result: 'ゼロデイ・エクスプロイト' },
+            { a: 'フォートレスプレス', b: 'デバッグモード', result: 'ゴッドモード' },
+            { a: 'セキュリティアップデート', b: 'リファクタリング', result: '完全修復プロトコル' },
+            { a: 'DDoS砲', b: '論理爆弾', result: 'サージストーム' }
         ];
 
-        // --- 職業とスキル定義 ---
+        // 職業別初期スキル
+        const JOB_INITIAL_SKILLS = {
+            'ホワイトハッカー': ['クイックスキャン', '緊急パッチ'],
+            'セキュリティエンジニア': ['DDoS砲', '論理爆弾'],
+            'ファイアウォール': ['シールドバッシュ', '鉄壁の守り'],
+            'フルスタック賢者': ['ヒールコード', 'クイックスキャン'],
+            'デバッガー': ['バグ潰し', '緊急パッチ']
+        };
+        
         const JOB_BASE_STATS = {
-            'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5, desc: '攻守のバランスが良い。脆弱性診断が得意。' },
-            'セキュリティエンジニア': { str: 4, mag: 14, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。MPが高い。' },
-            'ファイアウォール': { str: 12, mag: 2, vit: 14, spd: 4, expRate: 1.1, desc: '物理遮断特化。圧倒的な防御力とHP。' },
-            'フルスタック賢者': { str: 6, mag: 12, vit: 7, spd: 7, expRate: 1.4, desc: '全レイヤー(魔法)大UP。回復も攻撃も可能。' },
-            'デバッガー': { str: 8, mag: 6, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)キラー。敵を倒すと能力を吸収する。' },
-        };
-
-        const SKILL_DATA = {
-            'ホワイトハッカー': [
-                { name: 'クイックスキャン', mp: 4, level: 1, type: 'dmg', power: 1.3, desc: '弱点を突く高速攻撃' },
-                { name: '緊急パッチ', mp: 6, level: 3, type: 'heal', power: 0.4, desc: 'HPを中回復' }
-            ],
-            'セキュリティエンジニア': [
-                { name: 'DDoS砲', mp: 8, level: 1, type: 'dmg', power: 1.8, desc: '高負荷パケットで大ダメージ' },
-                { name: 'エクスプロイト', mp: 12, level: 3, type: 'dmg', power: 2.5, desc: '脆弱性を突く特大ダメージ' }
-            ],
-            'ファイアウォール': [
-                { name: 'シールドバッシュ', mp: 5, level: 1, type: 'dmg', power: 1.2, desc: '防御力を攻撃力に変えて攻撃' },
-                { name: '鉄壁の守り', mp: 8, level: 3, type: 'buff', power: 1.5, desc: '一時的に防御力UP(未実装)' } 
-            ],
-            'フルスタック賢者': [
-                { name: 'ヒールコード', mp: 5, level: 1, type: 'heal', power: 0.5, desc: 'HPを大幅に回復' },
-                { name: 'sudo rm -rf', mp: 15, level: 5, type: 'dmg', power: 3.0, desc: '究極の削除コマンド(超ダメージ)' }
-            ],
-            'デバッガー': [
-                { name: 'バグ潰し', mp: 4, level: 1, type: 'dmg', power: 1.4, desc: '確実にダメージを与える' },
-                { name: '強制終了', mp: 10, level: 4, type: 'dmg', power: 2.2, desc: 'プロセスをキルする強力な一撃' }
-            ]
-        };
-
-        // 敵が持っている吸収可能なスキル
-        const ENEMY_SKILLS = {
-            'XSSスパイダー': { name: 'スクリプト埋込', mp: 6, type: 'dmg', power: 1.6, desc: 'XSS攻撃。対象の内部からダメージ' },
-            'SQLインジェクター': { name: 'DROP TABLE', mp: 12, type: 'dmg', power: 2.8, desc: 'DB破壊攻撃。極大ダメージ' },
-            'ブルートフォーサー': { name: '総当たり攻撃', mp: 5, type: 'dmg', power: 1.3, desc: '数で攻める連続攻撃' },
-            'フィッシング詐欺師': { name: 'なりすまし', mp: 5, type: 'heal', power: 0.4, desc: '正規ユーザーのふりをして回復' },
-            '迷子のパケット': { name: '再送要求', mp: 3, type: 'heal', power: 0.2, desc: 'パケット再送で小回復' },
-            '旧式ルーター': { name: 'ボトルネック', mp: 4, type: 'dmg', power: 1.5, desc: '通信詰まりによる圧殺' },
-            '未パッチサーバー': { name: 'ゼロデイ', mp: 8, type: 'dmg', power: 2.0, desc: '未知の攻撃コード' },
-            '魔王エクスプロイト': { name: '権限昇格', mp: 20, type: 'dmg', power: 3.5, desc: 'Root権限による絶対的一撃' }
+            'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5 },
+            'セキュリティエンジニア': { str: 4, mag: 14, vit: 6, spd: 9, expRate: 1.2 },
+            'ファイアウォール': { str: 12, mag: 2, vit: 14, spd: 4, expRate: 1.1 },
+            'フルスタック賢者': { str: 6, mag: 12, vit: 7, spd: 7, expRate: 1.4 },
+            'デバッガー': { str: 8, mag: 6, vit: 9, spd: 6, expRate: 0.8 },
         };
 
         const COMBAT_COMMANDS = ['攻撃', 'スキル', '回復', '逃げる'];
 
+        // ゲーム状態
         const INITIAL_GAME_STATE = {
-            x: 0, y: 0, level: 1, job: '', exp: 0,
+            x: 2, y: 2, level: 1, job: '', exp: 0,
             maxHP: 50, currentHP: 50,
-            maxMP: 20, currentMP: 20, 
+            maxMP: 20, currentMP: 20,
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
-            pikmonParty: [], isJobSelected: false,
-            learnedSkills: [], // デバッガーが覚えたスキルリスト
+            // skills: [ { name: 'SkillName', exp: 0, master: false } ]
+            skills: [], 
             eventFlags: {},
             mode: 'OVERWORLD',
             currentEnemy: null,
             selectedCommand: 0,
             subMode: 'MAIN', 
             combatLock: false,
+            mapData: null // 生成されたマップを保存
         };
 
         let gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
@@ -331,29 +387,42 @@
         let isMenuOpen = false;
         let isGameLoopRunning = false;
 
-        // --- 描画システム ---
-        function drawTile(x, y, type) {
+        // --- 描画システム (カメラ対応) ---
+        function drawTile(x, y, type, camX, camY) {
+            const drawX = (x - camX) * TILE_SIZE;
+            const drawY = (y - camY) * TILE_SIZE;
+
             if (isTilesetLoaded) {
-                ctx.drawImage(tilesetImage, type * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                ctx.drawImage(tilesetImage, type * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, drawX, drawY, TILE_SIZE, TILE_SIZE);
             } else {
                 ctx.fillStyle = type === 1 ? '#475569' : '#1e293b';
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
             }
-        }
-
-        function drawPlayer() {
-            const px = gameState.x * TILE_SIZE;
-            const py = gameState.y * TILE_SIZE;
-            ctx.fillStyle = '#facc15'; 
-            ctx.beginPath(); ctx.moveTo(px + 16, py + 4); ctx.lineTo(px + 28, py + 28); ctx.lineTo(px + 4, py + 28); ctx.fill();
         }
 
         function drawMap() {
-            for (let y = 0; y < MAP_ROWS; y++) {
-                for (let x = 0; x < MAP_COLS; x++) {
-                    drawTile(x, y, gameMap[y][x]);
+            // カメラ位置計算 (プレイヤーを中心にする)
+            let camX = gameState.x - Math.floor(VIEW_COLS / 2);
+            let camY = gameState.y - Math.floor(VIEW_ROWS / 2);
+
+            // マップ端の制限
+            camX = Math.max(0, Math.min(camX, MAP_COLS - VIEW_COLS));
+            camY = Math.max(0, Math.min(camY, MAP_ROWS - VIEW_ROWS));
+
+            for (let y = camY; y < camY + VIEW_ROWS; y++) {
+                for (let x = camX; x < camX + VIEW_COLS; x++) {
+                    if (y >= 0 && y < MAP_ROWS && x >= 0 && x < MAP_COLS) {
+                        drawTile(x, y, gameMap[y][x], camX, camY);
+                    }
                 }
             }
+            
+            // プレイヤー描画 (カメラ相対座標)
+            const px = (gameState.x - camX) * TILE_SIZE;
+            const py = (gameState.y - camY) * TILE_SIZE;
+            
+            ctx.fillStyle = '#facc15'; 
+            ctx.beginPath(); ctx.moveTo(px + 8, py + 4); ctx.lineTo(px + 24, py + 16); ctx.lineTo(px + 8, py + 28); ctx.fill();
         }
 
         function drawBattleScreen() {
@@ -371,19 +440,18 @@
                 const cx = CANVAS_SIZE / 2; const cy = CANVAS_SIZE / 3;
                 const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
                 
-                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(cx, cy + 80, 80, 20, 0, 0, Math.PI * 2); ctx.fill();
 
                 ctx.fillStyle = enemyColor; ctx.beginPath();
                 if (gameState.currentEnemy.isBoss) {
-                    ctx.moveTo(cx, cy - 80); ctx.lineTo(cx + 60, cy); ctx.lineTo(cx + 40, cy + 80); ctx.lineTo(cx - 40, cy + 80); ctx.lineTo(cx - 60, cy);
+                    ctx.moveTo(cx, cy - 100); ctx.lineTo(cx + 80, cy); ctx.lineTo(cx + 50, cy + 100); ctx.lineTo(cx - 50, cy + 100); ctx.lineTo(cx - 80, cy);
                 } else {
                     ctx.moveTo(cx, cy - 50); ctx.lineTo(cx + 40, cy); ctx.lineTo(cx + 20, cy + 60); ctx.lineTo(cx - 20, cy + 60); ctx.lineTo(cx - 40, cy);
                 }
                 ctx.closePath(); ctx.fill();
                 
-                ctx.fillStyle = '#fff'; ctx.fillRect(cx - 20, cy - 10, 10, 10); ctx.fillRect(cx + 10, cy - 10, 10, 10);
-                ctx.font = '20px DotGothic16'; ctx.fillStyle = '#fef08a'; ctx.textAlign = 'center';
-                ctx.fillText(gameState.currentEnemy.name, cx, cy + 120);
+                ctx.font = '24px DotGothic16'; ctx.fillStyle = '#fef08a'; ctx.textAlign = 'center';
+                ctx.fillText(gameState.currentEnemy.name, cx, cy + 140);
             }
         }
 
@@ -392,19 +460,25 @@
             tilesetImage.src = TILE_ASSET_BASE64;
             tilesetImage.onload = () => { isTilesetLoaded = true; };
 
-            let startFound = false;
-            for (let y = 0; y < MAP_ROWS; y++) {
-                for (let x = 0; x < MAP_COLS; x++) {
-                    if (gameMap[y][x] === TILE_START) {
-                        if (gameState.x === 0 && gameState.y === 0) {
+            // マップ生成 or ロード
+            if (!gameState.mapData) {
+                gameMap = generateMap();
+                gameState.mapData = gameMap;
+            } else {
+                gameMap = gameState.mapData;
+            }
+
+            // プレイヤー初期位置 (スタート地点を探す)
+            if (gameState.x === 0 && gameState.y === 0) {
+                for (let y = 0; y < MAP_ROWS; y++) {
+                    for (let x = 0; x < MAP_COLS; x++) {
+                        if (gameMap[y][x] === TILE_START) {
                             gameState.x = x; gameState.y = y;
                         }
-                        startFound = true; break;
                     }
                 }
-                if (startFound) break;
             }
-            
+
             if (!gameState.isJobSelected) {
                 setTimeout(() => showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 3000), 1000);
             }
@@ -418,112 +492,70 @@
         function gameLoop() {
             ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
             if (gameState.mode === 'OVERWORLD') {
-                drawMap(); drawPlayer();
+                drawMap();
             } else if (gameState.mode === 'COMBAT') {
                 drawBattleScreen();
                 document.getElementById('enemy-status-box').classList.remove('hidden');
                 document.getElementById('combat-menu-box').classList.remove('hidden');
                 
-                if (gameState.subMode === 'MAIN') {
-                    renderCombatMenu();
-                } else if (gameState.subMode === 'SKILL') {
-                    renderSkillMenu();
-                }
+                if (gameState.subMode === 'MAIN') renderCombatMenu();
+                else if (gameState.subMode === 'SKILL') renderSkillMenu();
             }
             updateStatusDisplay();
             if (isGameLoopRunning && !gameState.isMenuOpen) requestAnimationFrame(gameLoop);
         }
 
         // --- 移動 ---
-        const MOVEMENT_COOLDOWN = 150; 
+        const MOVEMENT_COOLDOWN = 120; 
         let lastMoveTime = 0;
         function attemptMove(dx, dy) {
             if (!gameState.isJobSelected || gameState.isMenuOpen || gameState.mode === 'COMBAT') {
-                if (!gameState.isJobSelected && !gameState.isMenuOpen) showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 2000);
+                if (!gameState.isJobSelected && !gameState.isMenuOpen) showMessage("職業を選択してください(Eキー)。", 2000);
                 return;
             }
             const now = Date.now();
             if (now - lastMoveTime < MOVEMENT_COOLDOWN) return;
             lastMoveTime = now;
 
-            const nextX = (gameState.x + dx + MAP_COLS) % MAP_COLS;
-            const nextY = (gameState.y + dy + MAP_ROWS) % MAP_ROWS;
+            const nextX = gameState.x + dx;
+            const nextY = gameState.y + dy;
+
+            if (nextX < 0 || nextX >= MAP_COLS || nextY < 0 || nextY >= MAP_ROWS) return; // マップ外
+
             const targetTile = gameMap[nextY][nextX];
 
             if (targetTile !== TILE_WALL) {
                 gameState.x = nextX; gameState.y = nextY;
                 if (!checkStoryEvent(nextX, nextY)) {
-                     if (targetTile === TILE_GRASS) checkEncounter();
+                     if (targetTile === TILE_GRASS && Math.random() < 0.15) initCombat();
                 }
             }
         }
-        
-        // --- バトルロジック ---
+
+        // --- バトル & スキルシステム ---
         const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師'];
         const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
 
-        function checkEncounter() {
-            if (Math.random() < 0.15 && !gameState.combatLock) initCombat();
-        }
-
         function initCombat(bossData = null) {
             gameState.mode = 'COMBAT';
-            gameState.subMode = 'MAIN'; 
+            gameState.subMode = 'MAIN';
             gameState.selectedCommand = 0;
             gameState.combatLock = false;
 
             if (bossData) {
                 gameState.currentEnemy = bossData;
-                showMessage(`警告: ${bossData.name} が立ちはだかった！`, 4000);
+                showMessage(`警告: ${bossData.name} が出現！`, 4000);
             } else {
                 const isZeiJack = Math.random() > 0.4;
                 const enemyName = isZeiJack ? ZEIJACK_NAMES[Math.floor(Math.random() * ZEIJACK_NAMES.length)] : PROMON_NAMES[Math.floor(Math.random() * PROMON_NAMES.length)];
                 const enemyLevel = Math.max(1, gameState.level + Math.floor(Math.random() * 3) - 1);
-                const baseHp = 25 + enemyLevel * 8;
+                const baseHp = 30 + enemyLevel * 10;
                 gameState.currentEnemy = {
                     name: enemyName, maxHP: baseHp, currentHP: baseHp, level: enemyLevel, type: isZeiJack ? 'ZeiJack' : 'Promon', isBoss: false
                 };
-                showMessage(isZeiJack ? "不正なプロセスを検知！" : "中立なデータと遭遇。", 3000);
+                showMessage("敵性データと遭遇！", 2000);
             }
             document.getElementById('menuModal').classList.add('hidden');
-        }
-
-        function endCombat(outcome) {
-            const enemy = gameState.currentEnemy;
-            gameState.mode = 'OVERWORLD';
-            gameState.currentEnemy = null;
-            gameState.combatLock = false;
-            document.getElementById('enemy-status-box').classList.add('hidden');
-            document.getElementById('combat-menu-box').classList.add('hidden');
-
-            if (outcome === 'WIN') {
-                const expGain = enemy.isBoss ? 500 : Math.floor(Math.random() * 20) + 10 * enemy.level;
-                gameState.exp += expGain;
-                showMessage(`脅威を排除！ Exp+${expGain}`, 3000);
-                
-                // --- デバッガーのラーニング処理 ---
-                if (gameState.job === 'デバッガー') {
-                    const learnSkill = ENEMY_SKILLS[enemy.name];
-                    // まだ覚えていない場合のみ
-                    const alreadyLearned = gameState.learnedSkills.some(s => s.name === learnSkill?.name);
-                    
-                    if (learnSkill && !alreadyLearned) {
-                        gameState.learnedSkills.push(learnSkill);
-                        setTimeout(() => showMessage(`【ラーニング】${enemy.name}の能力『${learnSkill.name}』を吸収しました！`, 5000), 2500);
-                    }
-                }
-                
-                if (enemy.isBoss) {
-                    setTimeout(() => showMessage("「魔王エクスプロイト」は崩壊し、システムの制御権が戻った！ 世界に平和が訪れたのだ...", 10000), 4000);
-                }
-                checkLevelUp();
-            } else if (outcome === 'LOSE') {
-                showMessage("システムダウン... 再起動します。", 4000);
-                gameState.currentHP = Math.floor(gameState.maxHP / 2);
-                gameState.x = 1; gameState.y = 1; 
-            } else if (outcome === 'ESCAPE') {
-                showMessage("セッションを切断し、離脱しました。", 3000);
-            }
         }
 
         function executeCommand(command) {
@@ -531,156 +563,202 @@
             
             if (gameState.subMode === 'SKILL') {
                 if (command === '戻る') {
-                    gameState.subMode = 'MAIN';
-                    gameState.selectedCommand = 0;
-                    return;
+                    gameState.subMode = 'MAIN'; gameState.selectedCommand = 0; return;
                 }
-                if (typeof command === 'object') {
-                     performSkill(command);
-                }
+                if (typeof command === 'object') performSkill(command);
                 return;
             }
 
             switch (command) {
                 case '攻撃': 
-                    gameState.combatLock = true;
-                    performAttack(); 
-                    break;
+                    gameState.combatLock = true; performAttack(); break;
                 case 'スキル':
-                    gameState.subMode = 'SKILL';
-                    gameState.selectedCommand = 0;
-                    break;
+                    gameState.subMode = 'SKILL'; gameState.selectedCommand = 0; break;
                 case '回復':
                     gameState.combatLock = true;
                     if (gameState.currentHP < gameState.maxHP) {
                         const heal = Math.floor(gameState.maxHP * 0.3);
                         gameState.currentHP = Math.min(gameState.maxHP, gameState.currentHP + heal);
-                        showMessage(`パッチ適用。HPが${heal}回復。`, 2000);
-                        setTimeout(enemyTurn, 2500);
+                        showMessage(`自己修復。HP+${heal}`, 2000); setTimeout(enemyTurn, 2500);
                     } else {
-                        showMessage("システムは正常です。", 1500);
-                        gameState.combatLock = false;
+                        showMessage("HPは満タンです。", 1500); gameState.combatLock = false;
                     }
                     break;
                 case '逃げる':
                     if (gameState.currentEnemy.isBoss) {
-                        showMessage("管理者権限によりログアウトできません！", 2000);
+                        showMessage("逃げられない！", 2000);
                     } else {
                         gameState.combatLock = true;
-                        const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
-                        if (Math.random() < chance + 0.5) {
-                            setTimeout(() => endCombat('ESCAPE'), 1000);
-                        } else {
-                            showMessage("接続を切断できない！", 2000);
-                            setTimeout(enemyTurn, 2500);
-                        }
+                        if (Math.random() < 0.8) setTimeout(() => endCombat('ESCAPE'), 1000);
+                        else { showMessage("回り込まれた！", 2000); setTimeout(enemyTurn, 2000); }
                     }
                     break;
             }
         }
-        
+
         function performAttack() {
-            const crit = Math.random() < 0.1 ? 2 : 1;
-            const damage = Math.floor(Math.max(1, gameState.stats.str * 1.5 - (gameState.currentEnemy.level * 0.5)) * crit);
-            showMessage(`攻撃パケット送信... ${crit > 1 ? "クリティカル！" : ""} ${gameState.currentEnemy.name}に${damage}ダメージ！`, 3000);
-            gameState.currentEnemy.currentHP -= damage;
-            if (gameState.currentEnemy.currentHP <= 0) {
-                gameState.currentEnemy.currentHP = 0; setTimeout(() => endCombat('WIN'), 3500);
-            } else {
-                setTimeout(enemyTurn, 4000);
-            }
+            const damage = Math.floor(Math.max(1, gameState.stats.str * 1.2 - (gameState.currentEnemy.level * 0.5)));
+            showMessage(`攻撃！ ${damage}ダメージ！`, 2000);
+            applyDamage(damage);
         }
 
-        function performSkill(skill) {
-            if (gameState.currentMP < skill.mp) {
-                showMessage("メモリ(MP)が足りません！", 1500);
-                return;
+        function performSkill(skillData) {
+            const skill = gameState.skills.find(s => s.name === skillData.name);
+            const def = SKILL_DEFINITIONS[skill.name];
+            
+            if (gameState.currentMP < def.mp) {
+                showMessage("MPが足りません！", 1500); return;
             }
             
             gameState.combatLock = true;
-            gameState.currentMP -= skill.mp;
-            
-            if (skill.type === 'heal') {
-                const heal = Math.floor(gameState.maxHP * skill.power);
+            gameState.currentMP -= def.mp;
+
+            // スキル成長処理
+            growSkill(skill);
+
+            if (def.type === 'heal' || def.type === 'buff') {
+                const heal = Math.floor(gameState.maxHP * def.power);
                 gameState.currentHP = Math.min(gameState.maxHP, gameState.currentHP + heal);
-                showMessage(`${skill.name}！ HPが${heal}回復した。`, 2500);
-                setTimeout(enemyTurn, 3000);
+                showMessage(`${skill.name}！ HP+${heal}`, 2000);
+                setTimeout(enemyTurn, 2500);
             } else {
-                const baseDmg = skill.type === 'dmg' && skill.name.includes('物理') ? gameState.stats.str : gameState.stats.mag;
-                const damage = Math.floor(Math.max(1, baseDmg * skill.power));
+                const base = gameState.stats.mag;
+                const damage = Math.floor(Math.max(1, base * def.power));
+                showMessage(`${skill.name}！ ${damage}ダメージ！`, 2000);
+                applyDamage(damage);
+            }
+        }
+
+        function growSkill(skillObj) {
+            if (skillObj.master) return;
+
+            skillObj.exp += SKILL_EXP_GAIN;
+            if (skillObj.exp >= MASTERY_EXP) {
+                skillObj.exp = MASTERY_EXP;
+                skillObj.master = true;
+                setTimeout(() => showMessage(`【熟練】${skillObj.name}をマスターした！`, 3000), 1000);
                 
-                showMessage(`${skill.name}発動！ ${gameState.currentEnemy.name}に${damage}の大ダメージ！`, 3000);
-                gameState.currentEnemy.currentHP -= damage;
-                
-                if (gameState.currentEnemy.currentHP <= 0) {
-                    gameState.currentEnemy.currentHP = 0; setTimeout(() => endCombat('WIN'), 3500);
-                } else {
-                    setTimeout(enemyTurn, 4000);
+                // 進化・合成チェック
+                checkEvolution(skillObj);
+            }
+        }
+
+        function checkEvolution(skillObj) {
+            const def = SKILL_DEFINITIONS[skillObj.name];
+            let newSkillName = null;
+            let method = "";
+
+            // 1. 単体進化
+            if (def.evolution) {
+                newSkillName = def.evolution;
+                method = "進化";
+            }
+
+            // 2. 合成進化チェック
+            if (!newSkillName) {
+                for (const recipe of SYNTHESIS_RECIPES) {
+                    // 持っているか？
+                    const hasA = gameState.skills.find(s => s.name === recipe.a && s.master);
+                    const hasB = gameState.skills.find(s => s.name === recipe.b && s.master);
+                    const alreadyHas = gameState.skills.find(s => s.name === recipe.result);
+                    
+                    if (hasA && hasB && !alreadyHas) {
+                        newSkillName = recipe.result;
+                        method = "合成進化";
+                        break;
+                    }
+                }
+            }
+
+            if (newSkillName) {
+                // 既に持っているか確認
+                if (!gameState.skills.some(s => s.name === newSkillName)) {
+                    gameState.skills.push({ name: newSkillName, exp: 0, master: false });
+                    setTimeout(() => showMessage(`【${method}】新スキル『${newSkillName}』を習得！`, 4000), 2500);
                 }
             }
         }
 
+        function applyDamage( damage ) {
+            gameState.currentEnemy.currentHP -= damage;
+            if (gameState.currentEnemy.currentHP <= 0) {
+                gameState.currentEnemy.currentHP = 0;
+                setTimeout(() => endCombat('WIN'), 1500);
+            } else {
+                setTimeout(enemyTurn, 2000);
+            }
+        }
+
         function enemyTurn() {
-            const enemy = gameState.currentEnemy;
-            const damage = Math.floor(Math.max(0, enemy.level * 2 + 5 - gameState.stats.vit / 2));
-            gameState.currentHP -= damage;
-            showMessage(`${enemy.name}の反撃！ ${damage}のダメージを受けた！`, 3000);
+            const dmg = Math.max(1, Math.floor(gameState.currentEnemy.level * 1.5));
+            gameState.currentHP -= dmg;
+            showMessage(`敵の攻撃！ ${dmg}ダメージ。`, 2000);
             if (gameState.currentHP <= 0) {
-                gameState.currentHP = 0; setTimeout(() => endCombat('LOSE'), 3500);
+                gameState.currentHP = 0;
+                setTimeout(() => endCombat('LOSE'), 2000);
             } else {
                 setTimeout(() => {
                     gameState.combatLock = false;
                     gameState.subMode = 'MAIN';
                     gameState.selectedCommand = 0;
-                }, 3500);
+                }, 2000);
+            }
+        }
+
+        function endCombat(outcome) {
+            const enemy = gameState.currentEnemy;
+            gameState.mode = 'OVERWORLD';
+            gameState.currentEnemy = null;
+            document.getElementById('enemy-status-box').classList.add('hidden');
+            document.getElementById('combat-menu-box').classList.add('hidden');
+
+            if (outcome === 'WIN') {
+                gameState.exp += enemy.level * 10;
+                showMessage(`勝利！ Exp+${enemy.level*10}`, 3000);
+                if (enemy.isBoss) {
+                    gameState.eventFlags['BOSS_DEFEATED'] = true;
+                    setTimeout(() => showMessage("エリアボス撃破！ システムの安全が確保されました。", 6000), 3000);
+                }
+                checkLevelUp();
+            } else if (outcome === 'LOSE') {
+                showMessage("敗北... 緊急再起動。", 3000);
+                gameState.currentHP = gameState.maxHP;
+                // リスポーン
+                gameState.x = 2; gameState.y = 2; 
+            } else {
+                showMessage("離脱しました。", 2000);
             }
         }
 
         function checkLevelUp() {
-            const expNeeded = gameState.level * 100 * 1.2;
-            if (gameState.exp >= expNeeded) {
+            const needed = gameState.level * 100;
+            if (gameState.exp >= needed) {
                 gameState.level++;
-                gameState.exp = 0; 
-                
-                const job = JOB_BASE_STATS[gameState.job] || {str:2, mag:2, vit:2, spd:2};
-                gameState.stats.str += Math.ceil(job.str / 3);
-                gameState.stats.mag += Math.ceil(job.mag / 3);
-                gameState.stats.vit += Math.ceil(job.vit / 3);
-                gameState.stats.spd += Math.ceil(job.spd / 3);
-                
-                gameState.maxHP += 10 + Math.floor(job.vit / 2);
-                gameState.maxMP += 5 + Math.floor(job.mag / 3);
-                gameState.currentHP = gameState.maxHP;
-                gameState.currentMP = gameState.maxMP;
-
-                showMessage(`レベルアップ！ Lv${gameState.level}になり、システム性能が向上しました。`, 5000);
+                gameState.exp -= needed;
+                gameState.maxHP += 10; gameState.maxMP += 5;
+                gameState.currentHP = gameState.maxHP; gameState.currentMP = gameState.maxMP;
+                const base = JOB_BASE_STATS[gameState.job];
+                gameState.stats.str += Math.ceil(base.str/5);
+                gameState.stats.mag += Math.ceil(base.mag/5);
+                gameState.stats.vit += Math.ceil(base.vit/5);
+                gameState.stats.spd += Math.ceil(base.spd/5);
+                showMessage(`レベルアップ！ Lv${gameState.level}`, 3000);
             }
         }
-        
-        // --- イベント ---
+
+        // --- イベント判定 ---
         function checkStoryEvent(x, y) {
-            if (gameMap[y][x] === TILE_START && !gameState.eventFlags['START_TUTORIAL']) {
-                gameState.eventFlags['START_TUTORIAL'] = true;
-                showMessage("【ログ】認証完了。右下の『ルートディレクトリ』を目指し、脆弱性を修復せよ。", 8000); return true;
-            }
-            if (x === 8 && y === 8 && !gameState.eventFlags['MID_WARNING']) {
-                gameState.eventFlags['MID_WARNING'] = true;
-                showMessage("【警告】DoS攻撃の痕跡あり。慎重に進んでください。", 6000); return true;
-            }
-            if (x === 3 && y === 12 && !gameState.eventFlags['SECRET_CACHE']) {
-                gameState.eventFlags['SECRET_CACHE'] = true; gameState.exp += 50;
-                showMessage("【発見】古いキャッシュ「password123」を発見。経験値+50", 6000); return true;
-            }
-            if (x === 14 && y === 14) {
+            // ボス
+            if (gameMap[y][x] === TILE_BOSS) {
                 if (!gameState.eventFlags['BOSS_DEFEATED']) {
-                    initCombat({ name: '魔王エクスプロイト', maxHP: 300, currentHP: 300, level: 20, type: 'ZeiJack', isBoss: true }); return true;
-                } else {
-                    showMessage("ここは浄化されたルートディレクトリだ。平和なパケットが流れている。", 4000); return true;
+                    initCombat({ name: 'カーネル・パニック', maxHP: 500, currentHP: 500, level: 25, type: 'ZeiJack', isBoss: true });
+                    return true;
                 }
             }
             return false;
         }
 
+        // --- UI ---
         function showMessage(text, duration = 3000) {
             clearTimeout(messageTimer);
             const box = document.getElementById('message-box');
@@ -688,52 +766,67 @@
             p.textContent = text;
             box.classList.remove('hidden');
             
-            if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) p.className = "text-lg leading-relaxed text-red-300";
-            else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利") || text.includes("ラーニング")) p.className = "text-lg leading-relaxed text-yellow-300";
-            else p.className = "text-lg leading-relaxed text-green-300";
+            if (text.includes("警告") || text.includes("ダメージ") || text.includes("敗北")) p.className = "text-lg text-red-300";
+            else if (text.includes("習得") || text.includes("マスター") || text.includes("レベルアップ")) p.className = "text-lg text-yellow-300";
+            else p.className = "text-lg text-green-300";
             
             messageTimer = setTimeout(() => box.classList.add('hidden'), duration);
         }
 
         function updateStatusDisplay() {
-            document.getElementById('playerJob').textContent = `${gameState.job || '未定義'}`;
+            document.getElementById('playerJob').textContent = gameState.job || '未定義';
             document.getElementById('playerLevel').textContent = `Lv: ${gameState.level}`;
             document.getElementById('playerHP').textContent = `${gameState.currentHP} / ${gameState.maxHP}`;
             document.getElementById('playerMP').textContent = `${gameState.currentMP} / ${gameState.maxMP}`;
+            document.getElementById('playerPos').textContent = `X:${gameState.x} Y:${gameState.y}`;
             
             if (gameState.mode === 'COMBAT' && gameState.currentEnemy) {
-                const enemy = gameState.currentEnemy;
-                document.getElementById('enemyName').textContent = `${enemy.name}`;
-                document.getElementById('enemyHpText').textContent = `${enemy.currentHP} / ${enemy.maxHP}`;
-                document.getElementById('enemyHpBar').style.width = `${(enemy.currentHP / enemy.maxHP) * 100}%`;
+                const e = gameState.currentEnemy;
+                document.getElementById('enemyName').textContent = e.name;
+                document.getElementById('enemyHpText').textContent = `${e.currentHP}/${e.maxHP}`;
+                document.getElementById('enemyHpBar').style.width = `${(e.currentHP/e.maxHP)*100}%`;
             }
 
-            const statsText = `
-Lv: ${gameState.level} (${gameState.job})
-HP: ${gameState.currentHP}/${gameState.maxHP}  MP: ${gameState.currentMP}/${gameState.maxMP}
+            // メニュー内ステータス
+            const skillsText = gameState.skills.map(s => {
+                const def = SKILL_DEFINITIONS[s.name];
+                const star = s.master ? '★' : '';
+                const width = Math.floor((s.exp / MASTERY_EXP) * 100);
+                return `
+                    <li>
+                        <div class="flex justify-between text-cyan-200">
+                            <span>${star}${s.name}</span>
+                            <span>MP:${def.mp}</span>
+                        </div>
+                        <div class="text-xs text-gray-400">${def.desc}</div>
+                        <div class="flex items-center">
+                             <span class="text-xs w-8">${width}%</span>
+                             <div class="skill-exp-bar flex-1"><div class="skill-exp-fill" style="width:${width}%"></div></div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            document.getElementById('skillListDisplay').innerHTML = skillsText || '<li class="text-gray-500">なし</li>';
+
+            const statusText = `
+Lv: ${gameState.level}  ${gameState.job}
+HP: ${gameState.currentHP}/${gameState.maxHP}
+MP: ${gameState.currentMP}/${gameState.maxMP}
 EXP: ${gameState.exp}
-STR: ${gameState.stats.str} | MAG: ${gameState.stats.mag}
-VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
 
-[ロール特性]
-${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
+STR: ${gameState.stats.str}
+MAG: ${gameState.stats.mag}
+VIT: ${gameState.stats.vit}
+SPD: ${gameState.stats.spd}
             `.trim();
-            document.getElementById('statusText').textContent = statsText;
+            document.getElementById('statusText').textContent = statusText;
             document.getElementById('jobSelection').classList.toggle('hidden', gameState.isJobSelected);
-
-            // 習得スキル表示
-            if (gameState.learnedSkills && gameState.learnedSkills.length > 0) {
-                document.getElementById('learnedSkillsDisplay').classList.remove('hidden');
-                document.getElementById('learnedSkillsList').innerHTML = gameState.learnedSkills.map(s => `<li>[${s.name}] MP:${s.mp}</li>`).join('');
-            } else {
-                document.getElementById('learnedSkillsDisplay').classList.add('hidden');
-            }
         }
 
         function renderCombatMenu() {
             document.getElementById('menuTitle').textContent = 'コマンド';
-            const list = document.getElementById('commandList');
-            list.innerHTML = '';
+            const list = document.getElementById('commandList'); list.innerHTML = '';
             COMBAT_COMMANDS.forEach((cmd, idx) => {
                 const div = document.createElement('div');
                 div.className = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
@@ -744,25 +837,20 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
         }
 
         function renderSkillMenu() {
-            document.getElementById('menuTitle').textContent = 'スキル選択';
-            const list = document.getElementById('commandList');
-            list.innerHTML = '';
-
-            // 基本スキル + ラーニングスキル
-            let skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
-            if (gameState.job === 'デバッガー' && gameState.learnedSkills) {
-                skills = skills.concat(gameState.learnedSkills);
-            }
-
-            const menuItems = [...skills, '戻る'];
-
-            menuItems.forEach((item, idx) => {
+            document.getElementById('menuTitle').textContent = 'スキル';
+            const list = document.getElementById('commandList'); list.innerHTML = '';
+            
+            const items = [...gameState.skills, '戻る'];
+            items.forEach((item, idx) => {
                 const div = document.createElement('div');
-                const isSkill = typeof item === 'object';
-                const label = isSkill ? `${item.name} (MP:${item.mp})` : item;
-                
                 let classes = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
-                if (isSkill && gameState.currentMP < item.mp) classes += ' disabled';
+                let label = item;
+                
+                if (typeof item === 'object') {
+                    const def = SKILL_DEFINITIONS[item.name];
+                    label = `${item.name} ${def.mp}MP`;
+                    if (gameState.currentMP < def.mp) classes += ' disabled';
+                }
 
                 div.className = classes;
                 div.textContent = label;
@@ -771,110 +859,85 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             });
         }
 
-        // --- メニュー・UI操作 ---
-        window.openMenu = function() {
-            if (gameState.mode === 'COMBAT') return;
-            gameState.isMenuOpen = true;
-            document.getElementById('menuModal').classList.remove('hidden');
-            updateStatusDisplay();
-            isGameLoopRunning = false;
-        }
-
-        window.closeMenu = function() {
-            gameState.isMenuOpen = false;
-            document.getElementById('menuModal').classList.add('hidden');
-            isGameLoopRunning = true;
-            requestAnimationFrame(gameLoop);
-        }
-
-        window.selectJob = function(jobName) {
-            if (gameState.isJobSelected) return;
-            gameState.job = jobName;
-            gameState.isJobSelected = true;
-            const base = JOB_BASE_STATS[jobName];
-            gameState.stats = { ...base };
-            gameState.maxHP = 40 + base.vit * 2;
-            gameState.maxMP = 10 + base.mag * 2;
-            gameState.currentHP = gameState.maxHP;
-            gameState.currentMP = gameState.maxMP;
-            showMessage(`ロール: ${jobName} をインストールしました。`, 4000);
-            updateStatusDisplay();
-        }
-
-        // --- Local Storage ---
-        const SAVE_KEY_PREFIX = 'zeiJackQuest_save_slot_';
-        let currentMenuMode = 'save';
-
-        window.openSaveLoadMenu = function(mode) {
-            currentMenuMode = mode;
-            document.getElementById('sl-modal-title').textContent = mode === 'save' ? 'セーブするスロットを選択' : 'ロードするデータを選択';
-            const container = document.getElementById('save-slots');
-            container.innerHTML = '';
-            for (let i = 1; i <= 3; i++) {
-                const key = SAVE_KEY_PREFIX + i;
-                const dataJson = localStorage.getItem(key);
-                const btn = document.createElement('button');
-                btn.className = 'slot-button';
-                if (dataJson) {
-                    const data = JSON.parse(dataJson);
-                    btn.innerHTML = `<div>Slot ${i} <span class="slot-date">${new Date(data.timestamp).toLocaleString()}</span></div><div class="slot-info">Lv.${data.level} ${data.job}</div>`;
-                    btn.onclick = () => handleSlotAction(i);
-                } else {
-                    btn.innerHTML = `<div>Slot ${i}</div><div class="slot-button empty">No Data</div>`;
-                    if (mode === 'save') btn.onclick = () => handleSlotAction(i);
-                    else { btn.disabled = true; btn.style.opacity = '0.5'; }
-                }
-                container.appendChild(btn);
-            }
-            document.getElementById('save-load-modal').classList.remove('hidden');
-            if(mode === 'save') document.getElementById('menuModal').classList.add('hidden');
-        };
-
-        window.closeSaveLoadMenu = function() {
-            document.getElementById('save-load-modal').classList.add('hidden');
-            if (currentMenuMode === 'save') document.getElementById('menuModal').classList.remove('hidden');
-        };
-
-        function handleSlotAction(slotNum) {
-            if (currentMenuMode === 'save') {
-                const saveState = { ...gameState, timestamp: Date.now() };
-                localStorage.setItem(SAVE_KEY_PREFIX + slotNum, JSON.stringify(saveState));
-                showMessage(`スロット${slotNum}にセーブしました。`, 3000);
-            } else {
-                const data = JSON.parse(localStorage.getItem(SAVE_KEY_PREFIX + slotNum));
-                gameState = { ...INITIAL_GAME_STATE, ...data };
-                document.getElementById('title-screen').classList.add('hidden');
-                document.getElementById('main-container').classList.remove('hidden');
-                isGameLoopRunning = true; gameState.isMenuOpen = false;
-                document.getElementById('menuModal').classList.add('hidden');
-                showMessage("ロードしました。", 3000);
-                requestAnimationFrame(gameLoop);
-            }
-            window.closeSaveLoadMenu();
-        }
-
+        // --- システム ---
         window.startNewGame = function() {
             gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
             document.getElementById('title-screen').classList.add('hidden');
             document.getElementById('main-container').classList.remove('hidden');
             initGame();
-            setTimeout(() => showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000), 1000);
-        };
+            setTimeout(() => showMessage("ネットワークの深淵へようこそ。まずは職業を選択してください。", 4000), 500);
+        }
+        
+        window.selectJob = function(jobName) {
+            if (gameState.isJobSelected) return;
+            gameState.job = jobName; gameState.isJobSelected = true;
+            const base = JOB_BASE_STATS[jobName];
+            gameState.stats = { ...base };
+            gameState.maxHP = 40 + base.vit * 2; gameState.maxMP = 20 + base.mag * 2;
+            gameState.currentHP = gameState.maxHP; gameState.currentMP = gameState.maxMP;
+            
+            // 初期スキル付与
+            const initSkills = JOB_INITIAL_SKILLS[jobName];
+            gameState.skills = initSkills.map(name => ({ name: name, exp: 0, master: false }));
 
-        window.returnToTitle = function() {
-            isGameLoopRunning = false;
-            document.getElementById('main-container').classList.add('hidden');
-            document.getElementById('title-screen').classList.remove('hidden');
-        };
+            showMessage(`【${jobName}】として登録されました。`, 3000);
+            updateStatusDisplay();
+        }
+
+        window.openMenu = function() { if(gameState.mode!=='COMBAT') { gameState.isMenuOpen=true; document.getElementById('menuModal').classList.remove('hidden'); updateStatusDisplay(); isGameLoopRunning=false; } }
+        window.closeMenu = function() { gameState.isMenuOpen=false; document.getElementById('menuModal').classList.add('hidden'); isGameLoopRunning=true; requestAnimationFrame(gameLoop); }
+
+        // Save/Load
+        const SAVE_KEY_PREFIX = 'zeiJackQuest2_save_';
+        let currentMenuMode = 'save';
+        window.openSaveLoadMenu = function(mode) {
+            currentMenuMode = mode;
+            document.getElementById('sl-modal-title').textContent = mode === 'save' ? 'セーブ' : 'ロード';
+            const list = document.getElementById('save-slots'); list.innerHTML = '';
+            for(let i=1; i<=3; i++) {
+                const key = SAVE_KEY_PREFIX + i;
+                const data = localStorage.getItem(key);
+                const btn = document.createElement('button');
+                btn.className = 'slot-button';
+                if(data) {
+                    const d = JSON.parse(data);
+                    btn.innerHTML = `<div>File ${i} <span class="slot-date">${new Date(d.timestamp).toLocaleString()}</span></div><div class="slot-info">Lv${d.level} ${d.job}</div>`;
+                    btn.onclick = () => handleSlot(i);
+                } else {
+                    btn.innerHTML = `<div>File ${i}</div><div class="slot-button empty">NO DATA</div>`;
+                    if(mode==='save') btn.onclick = () => handleSlot(i);
+                    else btn.disabled = true;
+                }
+                list.appendChild(btn);
+            }
+            document.getElementById('save-load-modal').classList.remove('hidden');
+        }
+        window.closeSaveLoadMenu = () => document.getElementById('save-load-modal').classList.add('hidden');
+        
+        function handleSlot(i) {
+            if(currentMenuMode === 'save') {
+                gameState.timestamp = Date.now();
+                localStorage.setItem(SAVE_KEY_PREFIX+i, JSON.stringify(gameState));
+                showMessage(`File ${i} に保存しました。`, 2000);
+            } else {
+                const d = JSON.parse(localStorage.getItem(SAVE_KEY_PREFIX+i));
+                gameState = d;
+                document.getElementById('title-screen').classList.add('hidden');
+                document.getElementById('main-container').classList.remove('hidden');
+                initGame();
+                showMessage("ロードしました。", 2000);
+            }
+            closeSaveLoadMenu();
+        }
+        window.returnToTitle = () => location.reload();
 
         document.addEventListener('keydown', (e) => {
             if (!document.getElementById('save-load-modal').classList.contains('hidden')) {
-                if (e.key === 'Escape') window.closeSaveLoadMenu(); return;
+                if(e.key === 'Escape') window.closeSaveLoadMenu(); return;
             }
             if (gameState.isMenuOpen) {
                 if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') window.closeMenu(); return;
             }
-            
             if (gameState.mode === 'OVERWORLD' && isGameLoopRunning) {
                 if (e.key === 'ArrowUp') attemptMove(0, -1);
                 if (e.key === 'ArrowDown') attemptMove(0, 1);
@@ -882,24 +945,10 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 if (e.key === 'ArrowRight') attemptMove(1, 0);
                 if (e.key === 'e' || e.key === 'E') window.openMenu();
             } else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
-                const menuLength = gameState.subMode === 'SKILL' 
-                    ? ((SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || []).length + (gameState.learnedSkills ? gameState.learnedSkills.length : 0)) + 1 
-                    : COMBAT_COMMANDS.length;
-
-                if (e.key === 'ArrowUp') gameState.selectedCommand = (gameState.selectedCommand - 1 + menuLength) % menuLength;
-                if (e.key === 'ArrowDown') gameState.selectedCommand = (gameState.selectedCommand + 1) % menuLength;
-                
-                if (e.key === 'Enter') {
-                    if (gameState.subMode === 'MAIN') {
-                        executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
-                    } else {
-                        let skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
-                        if (gameState.job === 'デバッガー' && gameState.learnedSkills) skills = skills.concat(gameState.learnedSkills);
-                        
-                        if (gameState.selectedCommand < skills.length) executeCommand(skills[gameState.selectedCommand]);
-                        else executeCommand('戻る');
-                    }
-                }
+                const list = gameState.subMode === 'SKILL' ? [...gameState.skills, '戻る'] : COMBAT_COMMANDS;
+                if (e.key === 'ArrowUp') gameState.selectedCommand = (gameState.selectedCommand - 1 + list.length) % list.length;
+                if (e.key === 'ArrowDown') gameState.selectedCommand = (gameState.selectedCommand + 1) % list.length;
+                if (e.key === 'Enter') executeCommand(list[gameState.selectedCommand]);
                 if (gameState.subMode === 'MAIN') renderCombatMenu(); else renderSkillMenu();
             }
         });
