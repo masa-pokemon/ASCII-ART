@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ゼイジャックエストI - Security RPG</title>
+    <title>ゼイジャックエストI - Local Storage Ver.</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -13,16 +13,18 @@
             font-family: 'DotGothic16', monospace;
             background-color: #0f172a; /* Cyber World: Dark Slate */
             color: #e2e8f0; /* Light Text */
+            overflow: hidden; /* スクロール防止 */
         }
         #gameCanvas {
-            image-rendering: pixelated; /* ドット絵をきれいに表示 */
-            border: 4px solid #3b82f6; /* Blue border for a digital feel */
+            image-rendering: pixelated;
+            border: 4px solid #3b82f6;
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
             margin: 0 auto;
+            background-color: #000;
         }
         /* RPGメニュー/ウィンドウ風スタイル */
         .rpg-window {
-            background-color: rgba(30, 41, 59, 0.95); /* Darker, slightly transparent */
+            background-color: rgba(30, 41, 59, 0.95);
             border: 3px solid #60a5fa;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
@@ -30,6 +32,14 @@
         .pixel-button {
             transition: transform 0.1s;
             box-shadow: 0 3px #1e40af;
+            border: 2px solid #60a5fa; 
+            background-color: #1e3a8a;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+        }
+        .pixel-button:hover {
+            background-color: #2563eb;
         }
         .pixel-button:active {
             transform: translateY(2px);
@@ -41,50 +51,75 @@
             bottom: 20px;
             right: 20px;
             width: 200px;
-            height: auto; /* 高さを自動調整に変更 */
-            min-height: 100px; /* 最小の高さを設定 */
+            height: auto;
+            min-height: 100px;
             z-index: 10;
         }
         .menu-item {
             padding: 8px;
             cursor: pointer;
             transition: background-color 0.1s;
-            border-radius: 4px; /* 選択時の背景を見やすく */
+            border-radius: 4px;
             margin-bottom: 2px;
         }
         .menu-item.selected {
-            background-color: #3b82f6; /* Blue selection */
+            background-color: #3b82f6;
             color: #0f172a;
         }
+        /* スロットボタンスタイル */
+        .slot-button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 2px solid #475569;
+            background: #1e293b;
+            color: #94a3b8;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .slot-button:hover:not(:disabled) {
+            border-color: #3b82f6;
+            background: #334155;
+            color: #fff;
+        }
+        .slot-button.empty {
+            color: #64748b;
+            font-style: italic;
+        }
+        .slot-info {
+            font-size: 0.9em;
+            color: #cbd5e1;
+        }
+        .slot-date {
+            font-size: 0.75em;
+            color: #94a3b8;
+            float: right;
+        }
     </style>
-    <!-- Firebase Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // Firestoreログレベルをデバッグに設定
-        setLogLevel('Debug');
-
-        // グローバル変数
-        window.initializeApp = initializeApp;
-        window.getAuth = getAuth;
-        window.signInAnonymously = signInAnonymously;
-        window.signInWithCustomToken = signInWithCustomToken;
-        window.onAuthStateChanged = onAuthStateChanged;
-        window.getFirestore = getFirestore;
-        window.doc = doc;
-        window.getDoc = getDoc;
-        window.setDoc = setDoc;
-        window.onSnapshot = onSnapshot;
-    </script>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
 
+    <!-- タイトル画面 -->
+    <div id="title-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900">
+        <h1 class="text-5xl font-bold text-yellow-400 mb-2 tracking-widest drop-shadow-lg">ZeiJack Quest I</h1>
+        <p class="text-cyan-400 mb-12 text-lg tracking-wide">~ Cyber Security Saga ~</p>
+        
+        <div class="space-y-4 w-64">
+            <button onclick="startNewGame()" class="pixel-button w-full py-4 text-xl font-bold rounded">NEW GAME</button>
+            <button onclick="openSaveLoadMenu('load')" class="pixel-button w-full py-4 text-xl font-bold rounded">LOAD GAME</button>
+        </div>
+        <p class="absolute bottom-4 text-slate-500 text-xs">Local Storage Version</p>
+    </div>
+
     <!-- メインコンテナ -->
-    <div class="max-w-4xl w-full">
-        <h1 class="text-3xl font-bold text-center mb-6 text-yellow-400">ゼイジャックエストI <span class="text-sm text-cyan-300 block">~Cyber Security Saga~</span></h1>
+    <div id="main-container" class="max-w-4xl w-full hidden">
+        <div class="flex justify-between items-end mb-2">
+            <h1 class="text-2xl font-bold text-yellow-400">ゼイジャックエストI</h1>
+            <button onclick="returnToTitle()" class="text-xs text-gray-400 hover:text-white underline">タイトルへ戻る</button>
+        </div>
+        
         <div class="flex flex-col lg:flex-row gap-4">
             
             <!-- ゲーム画面コンテナ -->
@@ -119,7 +154,6 @@
                     <p id="playerLevel" class="text-sm">Lv: --</p>
                     <p id="playerHP" class="text-sm">HP: --</p>
                     <p id="statusMessage" class="text-sm text-green-400 mt-2 h-10 overflow-hidden">システム起動中...</p>
-                    <p class="text-xs mt-3 text-gray-400">UserID: <span id="userIdDisplay">未認証</span></p>
                 </div>
                 
                 <div class="rpg-window p-4">
@@ -141,18 +175,18 @@
     </div>
 
     <!-- Eキーメニューモーダル -->
-    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 hidden">
-        <div class="rpg-window p-6 w-11/12 max-w-xl">
-            <h2 class="text-2xl text-red-400 mb-4 border-b border-gray-500 pb-2">インベントリ・ステータス</h2>
+    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 hidden">
+        <div class="rpg-window p-6 w-11/12 max-w-xl relative">
+            <h2 class="text-2xl text-red-400 mb-4 border-b border-gray-500 pb-2">メニュー</h2>
             
-            <div id="jobSelection" class="space-y-3 mb-6">
+            <div id="jobSelection" class="space-y-3 mb-6 hidden">
                 <h3 class="text-lg text-yellow-300">職業選択 (最初のみ)</h3>
                 <div class="grid grid-cols-2 gap-3">
-                    <button onclick="selectJob('ホワイトハッカー')" class="pixel-button bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded">ホワイトハッカー(勇者)</button>
-                    <button onclick="selectJob('セキュリティエンジニア')" class="pixel-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded">S.E.(魔法使い)</button>
-                    <button onclick="selectJob('ファイアウォール')" class="pixel-button bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded">FW(剣士)</button>
-                    <button onclick="selectJob('フルスタック賢者')" class="pixel-button bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded">フルスタック(賢者)</button>
-                    <button onclick="selectJob('デバッガー')" class="pixel-button bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 rounded">デバッガー(魔物使い)</button>
+                    <button onclick="selectJob('ホワイトハッカー')" class="pixel-button bg-red-600 hover:bg-red-700 font-bold py-2 rounded">ホワイトハッカー(勇者)</button>
+                    <button onclick="selectJob('セキュリティエンジニア')" class="pixel-button bg-blue-600 hover:bg-blue-700 font-bold py-2 rounded">S.E.(魔法使い)</button>
+                    <button onclick="selectJob('ファイアウォール')" class="pixel-button bg-green-600 hover:bg-green-700 font-bold py-2 rounded">FW(剣士)</button>
+                    <button onclick="selectJob('フルスタック賢者')" class="pixel-button bg-purple-600 hover:bg-purple-700 font-bold py-2 rounded">フルスタック(賢者)</button>
+                    <button onclick="selectJob('デバッガー')" class="pixel-button bg-yellow-600 hover:bg-yellow-700 font-bold py-2 rounded">デバッガー(魔物使い)</button>
                 </div>
             </div>
 
@@ -161,64 +195,27 @@
                 <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
             </div>
             
-            <div id="pikmonParty" class="mb-6 border p-3 border-gray-700 rounded">
-                <h3 class="text-lg text-yellow-300 mb-2">仲間ピクモン</h3>
-                <ul id="pikmonList" class="text-sm space-y-1">
-                    <li>(まだ仲間はいません)</li>
-                </ul>
-            </div>
-
             <div class="flex justify-end space-x-3">
-                <button onclick="saveGame()" class="pixel-button bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">セーブ</button>
-                <button onclick="closeMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">閉じる (E)</button>
+                <button onclick="openSaveLoadMenu('save')" class="pixel-button bg-indigo-600 hover:bg-indigo-700 py-2 px-4 rounded">セーブ</button>
+                <button onclick="closeMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded">閉じる (E)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- セーブ/ロード選択モーダル -->
+    <div id="save-load-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden">
+        <div class="rpg-window p-6 w-96">
+            <h2 id="sl-modal-title" class="text-2xl text-white mb-4 border-b border-gray-500 pb-2">セーブデータ選択</h2>
+            <div id="save-slots" class="space-y-2 mb-4">
+                <!-- スロットボタンはJSで生成 -->
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeSaveLoadMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded">キャンセル</button>
             </div>
         </div>
     </div>
     
-    <script type="module">
-        // --- Firebase Init ---
-        let db;
-        let auth;
-        let userId = 'anonymous'; 
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        const USER_DOC_PATH = (uid) => `artifacts/${appId}/users/${uid}/metadata/gameState`;
-
-        let isAuthReady = false;
-
-        async function initFirebase() {
-            try {
-                const app = window.initializeApp(firebaseConfig);
-                db = window.getFirestore(app);
-                auth = window.getAuth(app);
-
-                if (initialAuthToken) {
-                    await window.signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await window.signInAnonymously(auth);
-                }
-
-                window.onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('userIdDisplay').textContent = userId.substring(0, 8) + '...';
-                        isAuthReady = true;
-                        loadGame();
-                    } else {
-                        isAuthReady = true;
-                        initGame();
-                    }
-                });
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                isAuthReady = true;
-                initGame();
-            }
-        }
-        
+    <script>
         // --- ゲーム定数と変数 ---
         const TILE_SIZE = 32;
         const CANVAS_SIZE = 512;
@@ -228,7 +225,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // タイルタイプ
         const TILE_GROUND = 0; 
         const TILE_WALL = 1; 
         const TILE_GRASS = 2; 
@@ -254,7 +250,6 @@
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         ];
 
-        // 初期ステータス (セキュリティRPG風にアレンジ)
         const JOB_BASE_STATS = {
             'ホワイトハッカー': { str: 10, mag: 8, vit: 10, spd: 8, expRate: 1.5, desc: '攻守のバランスが良い。脆弱性診断が得意。' },
             'セキュリティエンジニア': { str: 4, mag: 12, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。論理防御は低いが火力は高い。' },
@@ -265,89 +260,40 @@
 
         const COMBAT_COMMANDS = ['パケット攻撃', 'スキル', '修復アイテム', 'ログアウト'];
 
-        let gameState = {
-            x: 0,
-            y: 0,
-            level: 1,
-            job: '',
-            exp: 0,
-            maxHP: 50,
-            currentHP: 50,
+        // 初期状態テンプレート
+        const INITIAL_GAME_STATE = {
+            x: 0, y: 0, level: 1, job: '', exp: 0,
+            maxHP: 50, currentHP: 50,
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
-            pikmonParty: [], 
-            isJobSelected: false,
-            eventFlags: {}, // ストーリー進行用フラグ
-            messageTimer: null,
-            isMenuOpen: false,
-            // --- バトルシステム用変数 ---
-            mode: 'OVERWORLD', // 'OVERWORLD' or 'COMBAT'
-            currentEnemy: null, // { name, maxHP, currentHP, level, type }
+            pikmonParty: [], isJobSelected: false,
+            eventFlags: {},
+            mode: 'OVERWORLD',
+            currentEnemy: null,
             selectedCommand: 0,
             combatLock: false,
         };
 
-        // --- ゲーム初期化とメインループ ---
-        function initGame() {
-            // スタート地点の設定
-            let startFound = false;
-            for (let y = 0; y < MAP_ROWS; y++) {
-                for (let x = 0; x < MAP_COLS; x++) {
-                    if (gameMap[y][x] === TILE_START) {
-                        if (gameState.x === 0 && gameState.y === 0) { // 新規の場合のみ
-                            gameState.x = x;
-                            gameState.y = y;
-                        }
-                        startFound = true;
-                        break;
-                    }
-                }
-                if (startFound) break;
-            }
+        let gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
+        let messageTimer = null;
+        let isMenuOpen = false;
+        let isGameLoopRunning = false;
 
-            requestAnimationFrame(gameLoop);
-        }
-
-        function gameLoop() {
-            ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-            
-            if (gameState.mode === 'OVERWORLD') {
-                drawMap();
-                drawPlayer();
-            } else if (gameState.mode === 'COMBAT') {
-                drawBattleScreen();
-                document.getElementById('enemy-status-box').classList.remove('hidden');
-                document.getElementById('combat-menu-box').classList.remove('hidden');
-                renderCombatMenu();
-            }
-
-            updateStatusDisplay();
-            
-            if (!gameState.isMenuOpen) {
-                requestAnimationFrame(gameLoop);
-            }
-        }
-        
-        // --- 描画処理 ---
+        // --- 描画システム ---
         function drawTile(x, y, type) {
-            // サイバーパンク風配色
             const colors = {
-                [TILE_GROUND]: '#1e293b', // Dark Slate (Circuit Board base)
-                [TILE_WALL]: '#475569',   // Lighter Slate (Firewall)
-                [TILE_GRASS]: '#0f766e',  // Teal (Data Stream)
+                [TILE_GROUND]: '#1e293b',
+                [TILE_WALL]: '#475569',
+                [TILE_GRASS]: '#0f766e',
                 [TILE_START]: '#1e293b'
             };
-            
             ctx.fillStyle = colors[type] || '#000';
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
-            // グリッドライン
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 1;
             ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-            // タイルごとの装飾
             if (type === TILE_GRASS) {
-                ctx.fillStyle = '#2dd4bf'; // Bright Teal bits
+                ctx.fillStyle = '#2dd4bf';
                 ctx.fillRect(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 4, 4);
                 ctx.fillRect(x * TILE_SIZE + 20, y * TILE_SIZE + 20, 4, 4);
             } else if (type === TILE_WALL) {
@@ -366,7 +312,6 @@
         function drawPlayer() {
             const px = gameState.x * TILE_SIZE;
             const py = gameState.y * TILE_SIZE;
-            // プレイヤーキャラ（カーソル風）
             ctx.fillStyle = '#facc15'; 
             ctx.beginPath();
             ctx.moveTo(px + 16, py + 4);
@@ -384,14 +329,12 @@
         }
 
         function drawBattleScreen() {
-            // バトル背景
             const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_SIZE);
             gradient.addColorStop(0, '#0f172a');
             gradient.addColorStop(1, '#1e1b4b');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-            // デジタルグリッド
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
             ctx.lineWidth = 1;
             for(let i = 0; i < CANVAS_SIZE; i+=40) {
@@ -402,23 +345,17 @@
             if (gameState.currentEnemy) {
                 const cx = CANVAS_SIZE / 2;
                 const cy = CANVAS_SIZE / 3;
-
-                // 敵のタイプに応じた描画
-                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : // Boss: Red
-                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : // ZeiJack: Orange
-                                   '#22c55e'; // Promon: Green
+                const enemyColor = gameState.currentEnemy.isBoss ? '#ef4444' : 
+                                   gameState.currentEnemy.type === 'ZeiJack' ? '#f97316' : '#22c55e';
                 
-                // 敵の影
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.beginPath();
                 ctx.ellipse(cx, cy + 80, 60, 20, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 敵本体
                 ctx.fillStyle = enemyColor;
                 ctx.beginPath();
                 if (gameState.currentEnemy.isBoss) {
-                    // ボスは大きくトゲトゲ
                     ctx.moveTo(cx, cy - 80);
                     ctx.lineTo(cx + 60, cy);
                     ctx.lineTo(cx + 40, cy + 80);
@@ -434,12 +371,10 @@
                 ctx.closePath();
                 ctx.fill();
                 
-                // 敵の目
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(cx - 20, cy - 10, 10, 10);
                 ctx.fillRect(cx + 10, cy - 10, 10, 10);
 
-                // 名前表示
                 ctx.font = '20px DotGothic16';
                 ctx.fillStyle = '#fef08a';
                 ctx.textAlign = 'center';
@@ -447,13 +382,56 @@
             }
         }
 
-        // --- 移動とイベント判定 ---
+        // --- ゲームループ ---
+        function initGame() {
+            let startFound = false;
+            for (let y = 0; y < MAP_ROWS; y++) {
+                for (let x = 0; x < MAP_COLS; x++) {
+                    if (gameMap[y][x] === TILE_START) {
+                        if (gameState.x === 0 && gameState.y === 0) {
+                            gameState.x = x;
+                            gameState.y = y;
+                        }
+                        startFound = true;
+                        break;
+                    }
+                }
+                if (startFound) break;
+            }
+            
+            if (!gameState.isJobSelected) {
+                setTimeout(() => showMessage("Eキーでメニューを開き、職業(ロール)を選択してください。", 3000), 1000);
+            }
+            
+            if (!isGameLoopRunning) {
+                isGameLoopRunning = true;
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            
+            if (gameState.mode === 'OVERWORLD') {
+                drawMap();
+                drawPlayer();
+            } else if (gameState.mode === 'COMBAT') {
+                drawBattleScreen();
+                document.getElementById('enemy-status-box').classList.remove('hidden');
+                document.getElementById('combat-menu-box').classList.remove('hidden');
+                renderCombatMenu();
+            }
+
+            updateStatusDisplay();
+            
+            if (isGameLoopRunning && !gameState.isMenuOpen) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // --- 移動とイベント ---
         const MOVEMENT_COOLDOWN = 150; 
         let lastMoveTime = 0;
-
-        function mod(n, m) {
-            return ((n % m) + m) % m;
-        }
 
         function attemptMove(dx, dy) {
             if (!gameState.isJobSelected || gameState.isMenuOpen || gameState.mode === 'COMBAT') {
@@ -464,19 +442,15 @@
             if (now - lastMoveTime < MOVEMENT_COOLDOWN) return;
             lastMoveTime = now;
 
-            const nextX = gameState.x + dx;
-            const nextY = gameState.y + dy;
-            const newX = mod(nextX, MAP_COLS);
-            const newY = mod(nextY, MAP_ROWS);
+            const nextX = (gameState.x + dx + MAP_COLS) % MAP_COLS;
+            const nextY = (gameState.y + dy + MAP_ROWS) % MAP_ROWS;
 
-            const targetTile = gameMap[newY][newX];
+            const targetTile = gameMap[nextY][nextX];
 
             if (targetTile !== TILE_WALL) {
-                gameState.x = newX; 
-                gameState.y = newY;
-                
-                // イベントとエンカウントのチェック順序
-                if (!checkStoryEvent(newX, newY)) {
+                gameState.x = nextX; 
+                gameState.y = nextY;
+                if (!checkStoryEvent(nextX, nextY)) {
                      if (targetTile === TILE_GRASS) {
                         checkEncounter();
                     }
@@ -484,16 +458,16 @@
             }
         }
         
-        // --- バトルシステム ---
+        // --- バトルロジック ---
+        const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師'];
+        const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
+
         function checkEncounter() {
             if (Math.random() < 0.15 && !gameState.combatLock) { 
                 initCombat();
             }
         }
 
-        const ZEIJACK_NAMES = ['XSSスパイダー', 'SQLインジェクター', 'ブルートフォーサー', 'フィッシング詐欺師'];
-        const PROMON_NAMES = ['迷子のパケット', '旧式ルーター', '未パッチサーバー'];
-        
         function initCombat(bossData = null) {
             gameState.mode = 'COMBAT';
             gameState.selectedCommand = 0;
@@ -544,13 +518,10 @@
             } else if (outcome === 'LOSE') {
                 showMessage("システムダウン... 再起動します。", 4000);
                 gameState.currentHP = Math.floor(gameState.maxHP / 2);
-                // スタート地点に戻す
                 gameState.x = 1; gameState.y = 1; 
             } else if (outcome === 'ESCAPE') {
                 showMessage("セッションを切断し、離脱しました。", 3000);
             }
-            
-            requestAnimationFrame(gameLoop);
         }
 
         function executeCommand(command) {
@@ -579,7 +550,13 @@
                         showMessage("管理者権限によりログアウトできません！", 2000);
                         setTimeout(() => gameState.combatLock = false, 2000);
                     } else {
-                        performEscape();
+                        const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
+                        if (Math.random() < chance + 0.5) {
+                            setTimeout(() => endCombat('ESCAPE'), 1000);
+                        } else {
+                            showMessage("接続を切断できない！", 2000);
+                            setTimeout(enemyTurn, 2500);
+                        }
                     }
                     break;
             }
@@ -597,16 +574,6 @@
                 setTimeout(() => endCombat('WIN'), 3500);
             } else {
                 setTimeout(enemyTurn, 4000);
-            }
-        }
-        
-        function performEscape() {
-            const chance = gameState.stats.spd / (gameState.currentEnemy.level * 5 + 10);
-            if (Math.random() < chance + 0.5) { // 逃げやすく調整
-                setTimeout(() => endCombat('ESCAPE'), 1000);
-            } else {
-                showMessage("接続を切断できない！", 2000);
-                setTimeout(enemyTurn, 2500);
             }
         }
 
@@ -636,51 +603,33 @@
                 gameState.stats.mag += Math.ceil(job.mag / 3);
                 gameState.stats.vit += Math.ceil(job.vit / 3);
                 gameState.stats.spd += Math.ceil(job.spd / 3);
-                
                 gameState.maxHP += 10 + Math.floor(job.vit / 2);
                 gameState.currentHP = gameState.maxHP;
-
                 showMessage(`レベルアップ！ Lv${gameState.level}になり、システム性能が向上しました。`, 5000);
             }
         }
         
-        // --- ストーリーイベントシステム ---
         function checkStoryEvent(x, y) {
-            // ユニークキーでイベント管理
-            const locKey = `${x},${y}`;
-            
-            // 1. スタート地点 (チュートリアル)
             if (gameMap[y][x] === TILE_START && !gameState.eventFlags['START_TUTORIAL']) {
                 gameState.eventFlags['START_TUTORIAL'] = true;
-                showMessage("【システムログ】認証完了。ネットワーク内の脆弱性を特定し、パッチを適用せよ。右下の『ルートディレクトリ』を目指してください。", 10000);
+                showMessage("【システムログ】認証完了。ネットワーク内の脆弱性を特定し、パッチを適用せよ。右下の『ルートディレクトリ』を目指してください。", 8000);
                 return true;
             }
-
-            // 2. 中間地点 (8, 8) 付近
             if (x === 8 && y === 8 && !gameState.eventFlags['MID_WARNING']) {
                 gameState.eventFlags['MID_WARNING'] = true;
-                showMessage("【警告】このセクターはデータ破損が激しい。DoS攻撃の痕跡があります。慎重に進んでください。", 8000);
+                showMessage("【警告】このセクターはデータ破損が激しい。DoS攻撃の痕跡があります。慎重に進んでください。", 6000);
                 return true;
             }
-
-            // 3. 隠しポイント (3, 12) - セキュリティネタ
             if (x === 3 && y === 12 && !gameState.eventFlags['SECRET_CACHE']) {
                 gameState.eventFlags['SECRET_CACHE'] = true;
                 gameState.exp += 50;
                 showMessage("【発見】古いキャッシュデータを発見。「password123」...脆弱なパスワードだ。経験値+50", 6000);
                 return true;
             }
-
-            // 4. ボス戦トリガー (14, 14)
             if (x === 14 && y === 14) {
                 if (!gameState.eventFlags['BOSS_DEFEATED']) {
                     initCombat({
-                        name: '魔王エクスプロイト',
-                        maxHP: 300,
-                        currentHP: 300,
-                        level: 20,
-                        type: 'ZeiJack',
-                        isBoss: true
+                        name: '魔王エクスプロイト', maxHP: 300, currentHP: 300, level: 20, type: 'ZeiJack', isBoss: true
                     });
                     return true;
                 } else {
@@ -688,19 +637,16 @@
                     return true;
                 }
             }
-            
             return false;
         }
 
         function showMessage(text, duration = 3000) {
-            clearTimeout(gameState.messageTimer);
+            clearTimeout(messageTimer);
             const box = document.getElementById('message-box');
             const p = document.getElementById('message-text');
-            
             p.textContent = text;
             box.classList.remove('hidden');
             
-            // ログの色分け（簡易的）
             if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) {
                 p.className = "text-lg leading-relaxed text-red-300";
             } else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) {
@@ -709,9 +655,7 @@
                 p.className = "text-lg leading-relaxed text-green-300";
             }
             
-            gameState.messageTimer = setTimeout(() => {
-                box.classList.add('hidden');
-            }, duration);
+            messageTimer = setTimeout(() => box.classList.add('hidden'), duration);
         }
 
         function updateStatusDisplay() {
@@ -730,7 +674,6 @@
 Lv: ${gameState.level} (${gameState.job})
 HP: ${gameState.currentHP}/${gameState.maxHP}
 EXP: ${gameState.exp}
-
 STR: ${gameState.stats.str} | MAG: ${gameState.stats.mag}
 VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
 
@@ -738,7 +681,6 @@ VIT: ${gameState.stats.vit} | SPD: ${gameState.stats.spd}
 ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             `.trim();
             document.getElementById('statusText').textContent = statsText;
-
             document.getElementById('jobSelection').classList.toggle('hidden', gameState.isJobSelected);
         }
 
@@ -754,17 +696,19 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             });
         }
 
-        // --- 入力ハンドリング ---
+        // --- メニュー・UI操作 ---
         window.openMenu = function() {
-            if (!isAuthReady || gameState.mode === 'COMBAT') return;
+            if (gameState.mode === 'COMBAT') return;
             gameState.isMenuOpen = true;
             document.getElementById('menuModal').classList.remove('hidden');
             updateStatusDisplay();
+            isGameLoopRunning = false; // メニュー中はループ停止
         }
 
         window.closeMenu = function() {
             gameState.isMenuOpen = false;
             document.getElementById('menuModal').classList.add('hidden');
+            isGameLoopRunning = true;
             requestAnimationFrame(gameLoop);
         }
 
@@ -779,13 +723,131 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             updateStatusDisplay();
         }
 
+        // --- Local Storage セーブ/ロードシステム ---
+        const SAVE_KEY_PREFIX = 'zeiJackQuest_save_slot_';
+        let currentMenuMode = 'save'; // 'save' or 'load'
+
+        window.openSaveLoadMenu = function(mode) {
+            currentMenuMode = mode;
+            const modalTitle = document.getElementById('sl-modal-title');
+            const slotsContainer = document.getElementById('save-slots');
+            
+            modalTitle.textContent = mode === 'save' ? 'セーブするスロットを選択' : 'ロードするデータを選択';
+            slotsContainer.innerHTML = '';
+
+            for (let i = 1; i <= 3; i++) {
+                const key = SAVE_KEY_PREFIX + i;
+                const dataJson = localStorage.getItem(key);
+                const btn = document.createElement('button');
+                btn.className = 'slot-button';
+                
+                if (dataJson) {
+                    const data = JSON.parse(dataJson);
+                    const date = new Date(data.timestamp).toLocaleString();
+                    btn.innerHTML = `
+                        <div>Slot ${i} <span class="slot-date">${date}</span></div>
+                        <div class="slot-info">Lv.${data.level} ${data.job || 'No Job'} - HP:${data.currentHP}/${data.maxHP}</div>
+                        <div class="slot-info text-xs text-gray-500">Loc: (${data.x}, ${data.y})</div>
+                    `;
+                    btn.onclick = () => handleSlotAction(i);
+                } else {
+                    btn.innerHTML = `<div>Slot ${i}</div><div class="slot-button empty">No Data</div>`;
+                    if (mode === 'save') {
+                        btn.onclick = () => handleSlotAction(i);
+                    } else {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'default';
+                    }
+                }
+                slotsContainer.appendChild(btn);
+            }
+
+            document.getElementById('save-load-modal').classList.remove('hidden');
+            // メインメニューを一時的に隠す
+            if(mode === 'save') document.getElementById('menuModal').classList.add('hidden');
+        };
+
+        window.closeSaveLoadMenu = function() {
+            document.getElementById('save-load-modal').classList.add('hidden');
+            // セーブモードだった場合はメインメニューに戻る
+            if (currentMenuMode === 'save') {
+                document.getElementById('menuModal').classList.remove('hidden');
+            }
+        };
+
+        function handleSlotAction(slotNum) {
+            if (currentMenuMode === 'save') {
+                saveToSlot(slotNum);
+            } else {
+                loadFromSlot(slotNum);
+            }
+            window.closeSaveLoadMenu();
+        }
+
+        function saveToSlot(slotNum) {
+            const saveState = {
+                ...gameState,
+                timestamp: Date.now()
+            };
+            try {
+                localStorage.setItem(SAVE_KEY_PREFIX + slotNum, JSON.stringify(saveState));
+                showMessage(`スロット${slotNum}にセーブしました。`, 3000);
+            } catch (e) {
+                console.error(e);
+                showMessage("セーブに失敗しました（容量不足など）。", 3000);
+            }
+        }
+
+        function loadFromSlot(slotNum) {
+            const dataJson = localStorage.getItem(SAVE_KEY_PREFIX + slotNum);
+            if (dataJson) {
+                const data = JSON.parse(dataJson);
+                gameState = { ...INITIAL_GAME_STATE, ...data }; // マージしてロード
+                
+                // 画面遷移
+                document.getElementById('title-screen').classList.add('hidden');
+                document.getElementById('main-container').classList.remove('hidden');
+                
+                // 初期化
+                isGameLoopRunning = true;
+                gameState.isMenuOpen = false;
+                document.getElementById('menuModal').classList.add('hidden');
+                
+                showMessage("データをロードしました。", 3000);
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // --- タイトル画面操作 ---
+        window.startNewGame = function() {
+            gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE)); // リセット
+            document.getElementById('title-screen').classList.add('hidden');
+            document.getElementById('main-container').classList.remove('hidden');
+            
+            initGame();
+            setTimeout(() => {
+                showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000);
+            }, 1000);
+        };
+
+        window.returnToTitle = function() {
+            isGameLoopRunning = false;
+            document.getElementById('main-container').classList.add('hidden');
+            document.getElementById('title-screen').classList.remove('hidden');
+        };
+
         document.addEventListener('keydown', (e) => {
+            if (document.getElementById('save-load-modal').classList.contains('hidden') === false) {
+                if (e.key === 'Escape') window.closeSaveLoadMenu();
+                return;
+            }
             if (gameState.isMenuOpen) {
-                if (e.key === 'e' || e.key === 'E') window.closeMenu();
+                if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') window.closeMenu();
                 return;
             }
             
-            if (gameState.mode === 'OVERWORLD') {
+            if (gameState.mode === 'OVERWORLD' && isGameLoopRunning) {
                 if (e.key === 'ArrowUp') attemptMove(0, -1);
                 if (e.key === 'ArrowDown') attemptMove(0, 1);
                 if (e.key === 'ArrowLeft') attemptMove(-1, 0);
@@ -798,52 +860,6 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 renderCombatMenu();
             }
         });
-
-        // --- Save/Load ---
-        window.saveGame = async function() {
-            if (!isAuthReady || !userId || !db || !gameState.isJobSelected) {
-                showMessage("エラー: 認証またはロール選択が未完了です。", 3000);
-                return;
-            }
-            try {
-                const saveState = { 
-                    x: gameState.x, y: gameState.y, level: gameState.level, job: gameState.job,
-                    exp: gameState.exp, maxHP: gameState.maxHP, currentHP: gameState.currentHP,
-                    stats: gameState.stats, pikmonParty: gameState.pikmonParty, 
-                    isJobSelected: gameState.isJobSelected, eventFlags: gameState.eventFlags
-                };
-                await window.setDoc(window.doc(db, USER_DOC_PATH(userId)), saveState);
-                showMessage("システム状態をバックアップしました。", 3000);
-            } catch (error) {
-                console.error("Save error:", error);
-                showMessage("バックアップに失敗しました。", 3000);
-            }
-        }
-
-        async function loadGame() {
-            if (!isAuthReady || !userId || !db) return;
-            try {
-                const snap = await window.getDoc(window.doc(db, USER_DOC_PATH(userId)));
-                if (snap.exists()) {
-                    const data = snap.data();
-                    Object.assign(gameState, data);
-                    gameState.mode = 'OVERWORLD';
-                    showMessage("バックアップから復元しました。", 4000);
-                } else {
-                    // 初回プロローグ
-                    setTimeout(() => {
-                         showMessage("【プロローグ】時は2045年。電脳空間は未知のウイルス「ゼイジャック」により汚染されていた。", 6000);
-                    }, 1000);
-                }
-            } catch (error) {
-                console.error("Load error:", error);
-            }
-            initGame();
-        }
-
-        window.onload = function() {
-            initFirebase();
-        };
     </script>
 </body>
 </html>
