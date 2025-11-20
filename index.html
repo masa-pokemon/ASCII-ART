@@ -3,26 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ゼイジャックエストI - Local Storage Ver.</title>
+    <title>ゼイジャックエストI - TileSet Ver.</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
 
-        /* ドット絵風のフォントと基本スタイル */
         body {
             font-family: 'DotGothic16', monospace;
-            background-color: #0f172a; /* Cyber World: Dark Slate */
-            color: #e2e8f0; /* Light Text */
-            overflow: hidden; /* スクロール防止 */
+            background-color: #0f172a;
+            color: #e2e8f0;
+            overflow: hidden;
         }
         #gameCanvas {
-            image-rendering: pixelated;
+            image-rendering: pixelated; /* ドット絵をくっきり表示 */
             border: 4px solid #3b82f6;
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
             margin: 0 auto;
             background-color: #000;
         }
-        /* RPGメニュー/ウィンドウ風スタイル */
         .rpg-window {
             background-color: rgba(30, 41, 59, 0.95);
             border: 3px solid #60a5fa;
@@ -45,7 +43,6 @@
             transform: translateY(2px);
             box-shadow: 0 1px #1e40af;
         }
-        /* バトルメニュー用のスタイル */
         #combat-menu-box {
             position: absolute;
             bottom: 20px;
@@ -66,7 +63,6 @@
             background-color: #3b82f6;
             color: #0f172a;
         }
-        /* スロットボタンスタイル */
         .slot-button {
             display: block;
             width: 100%;
@@ -110,7 +106,7 @@
             <button onclick="startNewGame()" class="pixel-button w-full py-4 text-xl font-bold rounded">NEW GAME</button>
             <button onclick="openSaveLoadMenu('load')" class="pixel-button w-full py-4 text-xl font-bold rounded">LOAD GAME</button>
         </div>
-        <p class="absolute bottom-4 text-slate-500 text-xs">Local Storage Version</p>
+        <p class="absolute bottom-4 text-slate-500 text-xs">Local Storage & TileSet Version</p>
     </div>
 
     <!-- メインコンテナ -->
@@ -121,7 +117,6 @@
         </div>
         
         <div class="flex flex-col lg:flex-row gap-4">
-            
             <!-- ゲーム画面コンテナ -->
             <div id="game-container" class="lg:w-3/4 flex justify-center relative">
                 <canvas id="gameCanvas" width="512" height="512" class="w-full max-w-lg"></canvas>
@@ -159,9 +154,9 @@
                 <div class="rpg-window p-4">
                     <h2 class="text-xl text-yellow-300 border-b border-gray-500 pb-1 mb-2">操作方法</h2>
                     <ul class="list-disc list-inside text-sm space-y-1">
-                        <li>移動/メニュー操作: <span class="text-blue-400">矢印キー</span></li>
+                        <li>移動/メニュー: <span class="text-blue-400">矢印キー</span></li>
                         <li>決定: <span class="text-blue-400">Enterキー</span></li>
-                        <li>メニュー開閉: <span class="text-blue-400">Eキー</span></li>
+                        <li>メニュー: <span class="text-blue-400">Eキー</span></li>
                     </ul>
                 </div>
             </div>
@@ -171,7 +166,6 @@
         <div id="message-box" class="rpg-window p-4 mt-4 w-full h-24 flex items-center hidden">
             <p id="message-text" class="text-lg leading-relaxed"></p>
         </div>
-
     </div>
 
     <!-- Eキーメニューモーダル -->
@@ -206,9 +200,7 @@
     <div id="save-load-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden">
         <div class="rpg-window p-6 w-96">
             <h2 id="sl-modal-title" class="text-2xl text-white mb-4 border-b border-gray-500 pb-2">セーブデータ選択</h2>
-            <div id="save-slots" class="space-y-2 mb-4">
-                <!-- スロットボタンはJSで生成 -->
-            </div>
+            <div id="save-slots" class="space-y-2 mb-4"></div>
             <div class="flex justify-end">
                 <button onclick="closeSaveLoadMenu()" class="pixel-button bg-gray-600 hover:bg-gray-700 py-2 px-4 rounded">キャンセル</button>
             </div>
@@ -225,10 +217,45 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
+        // タイルID定義
         const TILE_GROUND = 0; 
         const TILE_WALL = 1; 
         const TILE_GRASS = 2; 
         const TILE_START = 9; 
+
+        // --- タイルセット画像生成 ---
+        // 実際のBase64画像がある場合は、以下の関数を使わず、直接文字列を代入してください。
+        function createDummyTileset() {
+            const c = document.createElement('canvas');
+            c.width = 320; // 32px * 10 tiles (0 to 9)
+            c.height = 32;
+            const cx = c.getContext('2d');
+
+            // Tile 0: Ground (Dark Blue Circuit)
+            cx.fillStyle = '#1e293b'; cx.fillRect(0, 0, 32, 32);
+            cx.strokeStyle = '#334155'; cx.lineWidth = 2; cx.strokeRect(2, 2, 28, 28);
+            
+            // Tile 1: Wall (Slate/Firewall)
+            cx.fillStyle = '#475569'; cx.fillRect(32, 0, 32, 32);
+            cx.fillStyle = '#64748b'; cx.fillRect(36, 4, 24, 24);
+            
+            // Tile 2: Grass (Data Stream)
+            cx.fillStyle = '#0f766e'; cx.fillRect(64, 0, 32, 32);
+            cx.fillStyle = '#2dd4bf'; // bits
+            cx.fillRect(68, 8, 4, 4); cx.fillRect(80, 20, 4, 4); cx.fillRect(88, 6, 2, 8);
+            
+            // Tile 9: Start (S mark)
+            cx.fillStyle = '#1e293b'; cx.fillRect(288, 0, 32, 32);
+            cx.fillStyle = '#3b82f6'; cx.font = 'bold 20px monospace'; cx.fillText('S', 296, 24);
+
+            return c.toDataURL();
+        }
+
+        // タイルセットBase64 (ここにお持ちのBase64画像を入れてもOK)
+        const TILE_ASSET_BASE64 = createDummyTileset();
+
+        let tilesetImage = new Image();
+        let isTilesetLoaded = false;
 
         // マップデータ (16x16)
         const gameMap = [
@@ -260,7 +287,6 @@
 
         const COMBAT_COMMANDS = ['パケット攻撃', 'スキル', '修復アイテム', 'ログアウト'];
 
-        // 初期状態テンプレート
         const INITIAL_GAME_STATE = {
             x: 0, y: 0, level: 1, job: '', exp: 0,
             maxHP: 50, currentHP: 50,
@@ -280,32 +306,18 @@
 
         // --- 描画システム ---
         function drawTile(x, y, type) {
-            const colors = {
-                [TILE_GROUND]: '#1e293b',
-                [TILE_WALL]: '#475569',
-                [TILE_GRASS]: '#0f766e',
-                [TILE_START]: '#1e293b'
-            };
-            ctx.fillStyle = colors[type] || '#000';
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
-            if (type === TILE_GRASS) {
-                ctx.fillStyle = '#2dd4bf';
-                ctx.fillRect(x * TILE_SIZE + 8, y * TILE_SIZE + 8, 4, 4);
-                ctx.fillRect(x * TILE_SIZE + 20, y * TILE_SIZE + 20, 4, 4);
-            } else if (type === TILE_WALL) {
-                ctx.strokeStyle = '#94a3b8';
-                ctx.beginPath();
-                ctx.moveTo(x * TILE_SIZE, y * TILE_SIZE);
-                ctx.lineTo(x * TILE_SIZE + TILE_SIZE, y * TILE_SIZE + TILE_SIZE);
-                ctx.stroke();
-            } else if (type === TILE_START) {
-                ctx.fillStyle = '#3b82f6';
-                ctx.font = '20px monospace';
-                ctx.fillText('S', x * TILE_SIZE + 8, y * TILE_SIZE + 24);
+            if (isTilesetLoaded) {
+                // タイルIDに基づいて画像を切り出し描画
+                // ソースX座標 = type * 32
+                ctx.drawImage(
+                    tilesetImage,
+                    type * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE, // Source
+                    x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE // Dest
+                );
+            } else {
+                // フォールバック描画
+                ctx.fillStyle = type === 1 ? '#475569' : '#1e293b';
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
         }
 
@@ -384,6 +396,12 @@
 
         // --- ゲームループ ---
         function initGame() {
+            // 画像読み込み
+            tilesetImage.src = TILE_ASSET_BASE64;
+            tilesetImage.onload = () => {
+                isTilesetLoaded = true;
+            };
+
             let startFound = false;
             for (let y = 0; y < MAP_ROWS; y++) {
                 for (let x = 0; x < MAP_COLS; x++) {
@@ -702,7 +720,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             gameState.isMenuOpen = true;
             document.getElementById('menuModal').classList.remove('hidden');
             updateStatusDisplay();
-            isGameLoopRunning = false; // メニュー中はループ停止
+            isGameLoopRunning = false;
         }
 
         window.closeMenu = function() {
@@ -725,7 +743,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
 
         // --- Local Storage セーブ/ロードシステム ---
         const SAVE_KEY_PREFIX = 'zeiJackQuest_save_slot_';
-        let currentMenuMode = 'save'; // 'save' or 'load'
+        let currentMenuMode = 'save';
 
         window.openSaveLoadMenu = function(mode) {
             currentMenuMode = mode;
@@ -764,13 +782,11 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             }
 
             document.getElementById('save-load-modal').classList.remove('hidden');
-            // メインメニューを一時的に隠す
             if(mode === 'save') document.getElementById('menuModal').classList.add('hidden');
         };
 
         window.closeSaveLoadMenu = function() {
             document.getElementById('save-load-modal').classList.add('hidden');
-            // セーブモードだった場合はメインメニューに戻る
             if (currentMenuMode === 'save') {
                 document.getElementById('menuModal').classList.remove('hidden');
             }
@@ -803,13 +819,11 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             const dataJson = localStorage.getItem(SAVE_KEY_PREFIX + slotNum);
             if (dataJson) {
                 const data = JSON.parse(dataJson);
-                gameState = { ...INITIAL_GAME_STATE, ...data }; // マージしてロード
+                gameState = { ...INITIAL_GAME_STATE, ...data };
                 
-                // 画面遷移
                 document.getElementById('title-screen').classList.add('hidden');
                 document.getElementById('main-container').classList.remove('hidden');
                 
-                // 初期化
                 isGameLoopRunning = true;
                 gameState.isMenuOpen = false;
                 document.getElementById('menuModal').classList.add('hidden');
@@ -821,7 +835,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
 
         // --- タイトル画面操作 ---
         window.startNewGame = function() {
-            gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE)); // リセット
+            gameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
             document.getElementById('title-screen').classList.add('hidden');
             document.getElementById('main-container').classList.remove('hidden');
             
