@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ゼイジャックエストI - Skill Update</title>
+    <title>ゼイジャックエストI - Debugger Learning</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
@@ -47,7 +47,7 @@
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 220px;
+            width: 240px;
             height: auto;
             min-height: 120px;
             z-index: 10;
@@ -186,6 +186,10 @@
             <div id="statsDisplay" class="mb-6 border p-3 border-gray-700 rounded">
                 <h3 class="text-lg text-yellow-300 mb-2">ステータス</h3>
                 <pre class="text-sm whitespace-pre-wrap font-mono" id="statusText">...</pre>
+                <div id="learnedSkillsDisplay" class="mt-4 pt-2 border-t border-gray-600 hidden">
+                    <h4 class="text-yellow-200 mb-1">習得済みバグスキル</h4>
+                    <ul id="learnedSkillsList" class="text-xs space-y-1 text-gray-300"></ul>
+                </div>
             </div>
             
             <div class="flex justify-end space-x-3">
@@ -216,7 +220,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        const TILE_GROUND = 0;
+        const TILE_GROUND = 0; 
         const TILE_WALL = 14; 
         const TILE_GRASS = 13; 
         const TILE_START = 9; 
@@ -267,11 +271,9 @@
             'セキュリティエンジニア': { str: 4, mag: 14, vit: 6, spd: 9, expRate: 1.2, desc: '攻撃スクリプト(魔法)特化。MPが高い。' },
             'ファイアウォール': { str: 12, mag: 2, vit: 14, spd: 4, expRate: 1.1, desc: '物理遮断特化。圧倒的な防御力とHP。' },
             'フルスタック賢者': { str: 6, mag: 12, vit: 7, spd: 7, expRate: 1.4, desc: '全レイヤー(魔法)大UP。回復も攻撃も可能。' },
-            'デバッガー': { str: 8, mag: 6, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)キラー。特殊なデバッグコマンドを使う。' },
+            'デバッガー': { str: 8, mag: 6, vit: 9, spd: 6, expRate: 0.8, desc: 'バグ(魔物)キラー。敵を倒すと能力を吸収する。' },
         };
 
-        // スキルデータ (type: 'dmg'=ダメージ, 'heal'=回復, 'buff'=強化)
-        // power: 攻撃なら倍率、回復なら最大HP割合、バフなら上昇量
         const SKILL_DATA = {
             'ホワイトハッカー': [
                 { name: 'クイックスキャン', mp: 4, level: 1, type: 'dmg', power: 1.3, desc: '弱点を突く高速攻撃' },
@@ -283,7 +285,7 @@
             ],
             'ファイアウォール': [
                 { name: 'シールドバッシュ', mp: 5, level: 1, type: 'dmg', power: 1.2, desc: '防御力を攻撃力に変えて攻撃' },
-                { name: '鉄壁の守り', mp: 8, level: 3, type: 'buff', power: 1.5, desc: '一時的に防御力UP(未実装)' } // 今回は簡易的に小回復扱い
+                { name: '鉄壁の守り', mp: 8, level: 3, type: 'buff', power: 1.5, desc: '一時的に防御力UP(未実装)' } 
             ],
             'フルスタック賢者': [
                 { name: 'ヒールコード', mp: 5, level: 1, type: 'heal', power: 0.5, desc: 'HPを大幅に回復' },
@@ -295,19 +297,32 @@
             ]
         };
 
+        // 敵が持っている吸収可能なスキル
+        const ENEMY_SKILLS = {
+            'XSSスパイダー': { name: 'スクリプト埋込', mp: 6, type: 'dmg', power: 1.6, desc: 'XSS攻撃。対象の内部からダメージ' },
+            'SQLインジェクター': { name: 'DROP TABLE', mp: 12, type: 'dmg', power: 2.8, desc: 'DB破壊攻撃。極大ダメージ' },
+            'ブルートフォーサー': { name: '総当たり攻撃', mp: 5, type: 'dmg', power: 1.3, desc: '数で攻める連続攻撃' },
+            'フィッシング詐欺師': { name: 'なりすまし', mp: 5, type: 'heal', power: 0.4, desc: '正規ユーザーのふりをして回復' },
+            '迷子のパケット': { name: '再送要求', mp: 3, type: 'heal', power: 0.2, desc: 'パケット再送で小回復' },
+            '旧式ルーター': { name: 'ボトルネック', mp: 4, type: 'dmg', power: 1.5, desc: '通信詰まりによる圧殺' },
+            '未パッチサーバー': { name: 'ゼロデイ', mp: 8, type: 'dmg', power: 2.0, desc: '未知の攻撃コード' },
+            '魔王エクスプロイト': { name: '権限昇格', mp: 20, type: 'dmg', power: 3.5, desc: 'Root権限による絶対的一撃' }
+        };
+
         const COMBAT_COMMANDS = ['攻撃', 'スキル', '回復', '逃げる'];
 
         const INITIAL_GAME_STATE = {
             x: 0, y: 0, level: 1, job: '', exp: 0,
             maxHP: 50, currentHP: 50,
-            maxMP: 20, currentMP: 20, // MP追加
+            maxMP: 20, currentMP: 20, 
             stats: { str: 5, mag: 5, vit: 5, spd: 5 },
             pikmonParty: [], isJobSelected: false,
+            learnedSkills: [], // デバッガーが覚えたスキルリスト
             eventFlags: {},
             mode: 'OVERWORLD',
             currentEnemy: null,
             selectedCommand: 0,
-            subMode: 'MAIN', // MAIN or SKILL
+            subMode: 'MAIN', 
             combatLock: false,
         };
 
@@ -409,7 +424,6 @@
                 document.getElementById('enemy-status-box').classList.remove('hidden');
                 document.getElementById('combat-menu-box').classList.remove('hidden');
                 
-                // モードに応じてメニュー描画を切り替え
                 if (gameState.subMode === 'MAIN') {
                     renderCombatMenu();
                 } else if (gameState.subMode === 'SKILL') {
@@ -454,7 +468,7 @@
 
         function initCombat(bossData = null) {
             gameState.mode = 'COMBAT';
-            gameState.subMode = 'MAIN'; // メインメニューから開始
+            gameState.subMode = 'MAIN'; 
             gameState.selectedCommand = 0;
             gameState.combatLock = false;
 
@@ -485,7 +499,20 @@
             if (outcome === 'WIN') {
                 const expGain = enemy.isBoss ? 500 : Math.floor(Math.random() * 20) + 10 * enemy.level;
                 gameState.exp += expGain;
-                showMessage(`脅威を排除した！ Exp+${expGain}`, 4000);
+                showMessage(`脅威を排除！ Exp+${expGain}`, 3000);
+                
+                // --- デバッガーのラーニング処理 ---
+                if (gameState.job === 'デバッガー') {
+                    const learnSkill = ENEMY_SKILLS[enemy.name];
+                    // まだ覚えていない場合のみ
+                    const alreadyLearned = gameState.learnedSkills.some(s => s.name === learnSkill?.name);
+                    
+                    if (learnSkill && !alreadyLearned) {
+                        gameState.learnedSkills.push(learnSkill);
+                        setTimeout(() => showMessage(`【ラーニング】${enemy.name}の能力『${learnSkill.name}』を吸収しました！`, 5000), 2500);
+                    }
+                }
+                
                 if (enemy.isBoss) {
                     setTimeout(() => showMessage("「魔王エクスプロイト」は崩壊し、システムの制御権が戻った！ 世界に平和が訪れたのだ...", 10000), 4000);
                 }
@@ -503,20 +530,17 @@
             if (gameState.combatLock) return;
             
             if (gameState.subMode === 'SKILL') {
-                // スキル選択モード時の処理
                 if (command === '戻る') {
                     gameState.subMode = 'MAIN';
                     gameState.selectedCommand = 0;
                     return;
                 }
-                // スキルオブジェクトが渡された場合
                 if (typeof command === 'object') {
                      performSkill(command);
                 }
                 return;
             }
 
-            // メインコマンド処理
             switch (command) {
                 case '攻撃': 
                     gameState.combatLock = true;
@@ -582,7 +606,6 @@
                 showMessage(`${skill.name}！ HPが${heal}回復した。`, 2500);
                 setTimeout(enemyTurn, 3000);
             } else {
-                // 攻撃系スキル
                 const baseDmg = skill.type === 'dmg' && skill.name.includes('物理') ? gameState.stats.str : gameState.stats.mag;
                 const damage = Math.floor(Math.max(1, baseDmg * skill.power));
                 
@@ -607,7 +630,6 @@
             } else {
                 setTimeout(() => {
                     gameState.combatLock = false;
-                    // ターン終了時にメインメニューに戻す
                     gameState.subMode = 'MAIN';
                     gameState.selectedCommand = 0;
                 }, 3500);
@@ -627,7 +649,7 @@
                 gameState.stats.spd += Math.ceil(job.spd / 3);
                 
                 gameState.maxHP += 10 + Math.floor(job.vit / 2);
-                gameState.maxMP += 5 + Math.floor(job.mag / 3); // MP上昇
+                gameState.maxMP += 5 + Math.floor(job.mag / 3);
                 gameState.currentHP = gameState.maxHP;
                 gameState.currentMP = gameState.maxMP;
 
@@ -667,7 +689,7 @@
             box.classList.remove('hidden');
             
             if (text.includes("警告") || text.includes("ダメージ") || text.includes("魔王")) p.className = "text-lg leading-relaxed text-red-300";
-            else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利")) p.className = "text-lg leading-relaxed text-yellow-300";
+            else if (text.includes("発見") || text.includes("レベルアップ") || text.includes("勝利") || text.includes("ラーニング")) p.className = "text-lg leading-relaxed text-yellow-300";
             else p.className = "text-lg leading-relaxed text-green-300";
             
             messageTimer = setTimeout(() => box.classList.add('hidden'), duration);
@@ -698,6 +720,14 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             `.trim();
             document.getElementById('statusText').textContent = statsText;
             document.getElementById('jobSelection').classList.toggle('hidden', gameState.isJobSelected);
+
+            // 習得スキル表示
+            if (gameState.learnedSkills && gameState.learnedSkills.length > 0) {
+                document.getElementById('learnedSkillsDisplay').classList.remove('hidden');
+                document.getElementById('learnedSkillsList').innerHTML = gameState.learnedSkills.map(s => `<li>[${s.name}] MP:${s.mp}</li>`).join('');
+            } else {
+                document.getElementById('learnedSkillsDisplay').classList.add('hidden');
+            }
         }
 
         function renderCombatMenu() {
@@ -718,19 +748,19 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             const list = document.getElementById('commandList');
             list.innerHTML = '';
 
-            // 習得済みスキルを抽出 (レベル条件)
-            const allSkills = SKILL_DATA[gameState.job] || [];
-            const knownSkills = allSkills.filter(s => s.level <= gameState.level);
+            // 基本スキル + ラーニングスキル
+            let skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
+            if (gameState.job === 'デバッガー' && gameState.learnedSkills) {
+                skills = skills.concat(gameState.learnedSkills);
+            }
 
-            // 戻るボタンを含めたリスト
-            const menuItems = [...knownSkills, '戻る'];
+            const menuItems = [...skills, '戻る'];
 
             menuItems.forEach((item, idx) => {
                 const div = document.createElement('div');
                 const isSkill = typeof item === 'object';
                 const label = isSkill ? `${item.name} (MP:${item.mp})` : item;
                 
-                // MP不足ならグレーアウト
                 let classes = `menu-item ${idx === gameState.selectedCommand ? 'selected' : 'text-white'}`;
                 if (isSkill && gameState.currentMP < item.mp) classes += ' disabled';
 
@@ -764,7 +794,7 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
             const base = JOB_BASE_STATS[jobName];
             gameState.stats = { ...base };
             gameState.maxHP = 40 + base.vit * 2;
-            gameState.maxMP = 10 + base.mag * 2; // 初期MP
+            gameState.maxMP = 10 + base.mag * 2;
             gameState.currentHP = gameState.maxHP;
             gameState.currentMP = gameState.maxMP;
             showMessage(`ロール: ${jobName} をインストールしました。`, 4000);
@@ -852,9 +882,8 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                 if (e.key === 'ArrowRight') attemptMove(1, 0);
                 if (e.key === 'e' || e.key === 'E') window.openMenu();
             } else if (gameState.mode === 'COMBAT' && !gameState.combatLock) {
-                // バトル中の入力処理
                 const menuLength = gameState.subMode === 'SKILL' 
-                    ? (SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level).length || 0) + 1 // +1 for '戻る'
+                    ? ((SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || []).length + (gameState.learnedSkills ? gameState.learnedSkills.length : 0)) + 1 
                     : COMBAT_COMMANDS.length;
 
                 if (e.key === 'ArrowUp') gameState.selectedCommand = (gameState.selectedCommand - 1 + menuLength) % menuLength;
@@ -864,18 +893,14 @@ ${JOB_BASE_STATS[gameState.job]?.desc || '未選択'}
                     if (gameState.subMode === 'MAIN') {
                         executeCommand(COMBAT_COMMANDS[gameState.selectedCommand]);
                     } else {
-                        const skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
-                        if (gameState.selectedCommand < skills.length) {
-                            executeCommand(skills[gameState.selectedCommand]);
-                        } else {
-                            executeCommand('戻る');
-                        }
+                        let skills = SKILL_DATA[gameState.job]?.filter(s => s.level <= gameState.level) || [];
+                        if (gameState.job === 'デバッガー' && gameState.learnedSkills) skills = skills.concat(gameState.learnedSkills);
+                        
+                        if (gameState.selectedCommand < skills.length) executeCommand(skills[gameState.selectedCommand]);
+                        else executeCommand('戻る');
                     }
                 }
-                
-                // 描画更新
-                if (gameState.subMode === 'MAIN') renderCombatMenu();
-                else renderSkillMenu();
+                if (gameState.subMode === 'MAIN') renderCombatMenu(); else renderSkillMenu();
             }
         });
     </script>
